@@ -1,0 +1,42 @@
+# ============================
+# Geopolitical Health Intelligence Dashboard
+# requirements.txt
+# ============================
+
+# Database
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+
+# HTTP / Scraping
+requests>=2.31
+beautifulsoup4>=4.12
+feedparser>=6.0
+lxml>=5.0
+
+# Data
+pandas>=2.1
+numpy>=1.26
+
+# NLP / Text Processing
+spacy>=3.7
+rapidfuzz>=3.5
+
+# API Clients
+biopython>=1.83        # PubMed E-utilities
+pytrends>=4.9          # Google Trends (non-official)
+
+# Dashboard
+streamlit>=1.30
+plotly>=5.18
+pydeck>=0.8
+streamlit-autorefresh>=1.0.1
+
+# Scheduling
+schedule>=1.2
+
+# Utilities
+python-dotenv>=1.0
+pyyaml>=6.0
+
+# Email alerts
+jinja2>=3.1

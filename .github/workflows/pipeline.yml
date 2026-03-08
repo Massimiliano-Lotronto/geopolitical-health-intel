@@ -1,0 +1,53 @@
+# ======================================================
+# GitHub Actions - Pipeline automatica
+# Esegue collector + tagger + scorer + alerts
+# Schedule: ogni 12 ore
+# ======================================================
+
+name: Health Intel Pipeline
+
+on:
+  schedule:
+    # Ogni 12 ore: 06:00 e 18:00 UTC
+    - cron: '0 6,18 * * *'
+  workflow_dispatch:  # Esecuzione manuale
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+          NCBI_EMAIL: ${{ secrets.NCBI_EMAIL }}
+          BUNDESTAG_API_KEY: ${{ secrets.BUNDESTAG_API_KEY }}
+          DIGA_FHIR_TOKEN: ${{ secrets.DIGA_FHIR_TOKEN }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_RECIPIENTS: ${{ secrets.ALERT_RECIPIENTS }}
+        run: python main.py
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-log-${{ github.run_number }}
+          path: pipeline.log
+          retention-days: 14

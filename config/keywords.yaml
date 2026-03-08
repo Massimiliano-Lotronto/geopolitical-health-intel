@@ -1,0 +1,121 @@
+# ====================================================
+# DIZIONARIO KEYWORD - 5 LIVELLI
+# Ogni keyword ha: text, cluster, level, disease_area, geography_tag
+# ====================================================
+
+# ── LIVELLO 1: Macro-topic ────────────────────────────
+level_1_macro:
+  - { keyword: "digital health", cluster: "digital_health" }
+  - { keyword: "AI in healthcare", cluster: "ai_health" }
+  - { keyword: "artificial intelligence healthcare", cluster: "ai_health" }
+  - { keyword: "health data", cluster: "health_data" }
+  - { keyword: "telemedicine", cluster: "telemedicine" }
+  - { keyword: "telehealth", cluster: "telemedicine" }
+  - { keyword: "remote patient monitoring", cluster: "rpm" }
+  - { keyword: "digital therapeutics", cluster: "dtx" }
+  - { keyword: "clinical AI", cluster: "ai_health" }
+  - { keyword: "health interoperability", cluster: "interop" }
+  - { keyword: "medical device software", cluster: "samd" }
+  - { keyword: "AI medical device", cluster: "ai_device" }
+  - { keyword: "AI-enabled medical device", cluster: "ai_device" }
+  - { keyword: "public health AI", cluster: "ai_health" }
+  - { keyword: "health technology assessment", cluster: "hta" }
+  - { keyword: "mHealth", cluster: "mhealth" }
+  - { keyword: "wearable health", cluster: "wearable" }
+  - { keyword: "electronic health record", cluster: "ehr" }
+  - { keyword: "EHR", cluster: "ehr" }
+  - { keyword: "precision medicine", cluster: "precision" }
+  - { keyword: "real world evidence", cluster: "rwe" }
+  - { keyword: "federated learning healthcare", cluster: "ai_health" }
+
+# ── LIVELLO 2: Regolatorio ────────────────────────────
+level_2_regulatory:
+  - { keyword: "AI Act", cluster: "eu_regulation" }
+  - { keyword: "EHDS", cluster: "eu_regulation" }
+  - { keyword: "European Health Data Space", cluster: "eu_regulation" }
+  - { keyword: "SaMD", cluster: "samd_reg" }
+  - { keyword: "software as a medical device", cluster: "samd_reg" }
+  - { keyword: "AI-enabled medical device", cluster: "ai_device_reg" }
+  - { keyword: "cybersecurity medical device", cluster: "cyber_med" }
+  - { keyword: "health data governance", cluster: "data_gov" }
+  - { keyword: "health data sharing", cluster: "data_gov" }
+  - { keyword: "reimbursement digital health", cluster: "reimbursement" }
+  - { keyword: "HTA digital health", cluster: "hta" }
+  - { keyword: "clinical validation AI", cluster: "validation" }
+  - { keyword: "MDR", cluster: "eu_regulation" }
+  - { keyword: "IVDR", cluster: "eu_regulation" }
+  - { keyword: "FDA guidance AI", cluster: "fda_reg" }
+  - { keyword: "FDA SaMD", cluster: "fda_reg" }
+  - { keyword: "PCCP", cluster: "fda_reg" }
+  - { keyword: "clinical decision support", cluster: "cds" }
+  - { keyword: "NMPA AI", cluster: "china_reg" }
+  - { keyword: "algorithm regulation", cluster: "algo_reg" }
+
+# ── LIVELLO 3: Neurodegenerativo ──────────────────────
+level_3_neuro:
+  - { keyword: "Alzheimer", cluster: "alzheimer", disease_area: "alzheimer" }
+  - { keyword: "Alzheimer's disease", cluster: "alzheimer", disease_area: "alzheimer" }
+  - { keyword: "dementia", cluster: "dementia", disease_area: "dementia" }
+  - { keyword: "Parkinson", cluster: "parkinson", disease_area: "parkinson" }
+  - { keyword: "Parkinson's disease", cluster: "parkinson", disease_area: "parkinson" }
+  - { keyword: "neurodegenerative disease", cluster: "neuro_general", disease_area: "neurodegenerative" }
+  - { keyword: "cognitive impairment", cluster: "cognitive", disease_area: "cognitive" }
+  - { keyword: "mild cognitive impairment", cluster: "cognitive", disease_area: "mci" }
+  - { keyword: "ALS", cluster: "als", disease_area: "als" }
+  - { keyword: "amyotrophic lateral sclerosis", cluster: "als", disease_area: "als" }
+  - { keyword: "frontotemporal dementia", cluster: "ftd", disease_area: "ftd" }
+  - { keyword: "Lewy body dementia", cluster: "lbd", disease_area: "lbd" }
+  - { keyword: "Huntington", cluster: "huntington", disease_area: "huntington" }
+  - { keyword: "digital biomarker dementia", cluster: "digital_biomarker", disease_area: "dementia" }
+  - { keyword: "remote cognition monitoring", cluster: "remote_cognition", disease_area: "cognitive" }
+  - { keyword: "caregiver technology dementia", cluster: "caregiver_tech", disease_area: "dementia" }
+  - { keyword: "EEG dementia", cluster: "eeg_neuro", disease_area: "dementia" }
+  - { keyword: "brain-computer interface", cluster: "bci", disease_area: "neurodegenerative" }
+  - { keyword: "ambient assisted living", cluster: "aal", disease_area: "dementia" }
+  - { keyword: "fall detection elderly", cluster: "fall_detect", disease_area: "elderly" }
+  - { keyword: "cognitive assessment digital", cluster: "cognitive_assess", disease_area: "cognitive" }
+  - { keyword: "sleep monitoring neurodegeneration", cluster: "sleep_neuro", disease_area: "neurodegenerative" }
+  - { keyword: "digital biomarker Parkinson", cluster: "digital_biomarker", disease_area: "parkinson" }
+
+# ── LIVELLO 4: LMIC / Accesso ────────────────────────
+level_4_lmic:
+  - { keyword: "digital health LMIC", cluster: "dh_lmic", geography_tag: "lmic" }
+  - { keyword: "telemedicine Africa", cluster: "telemed_africa", geography_tag: "africa" }
+  - { keyword: "mHealth maternal health", cluster: "mhealth_maternal", geography_tag: "lmic" }
+  - { keyword: "community health worker digital", cluster: "chw_digital", geography_tag: "lmic" }
+  - { keyword: "digital diagnostics low-resource", cluster: "diag_lowres", geography_tag: "lmic" }
+  - { keyword: "connectivity health access", cluster: "connectivity", geography_tag: "lmic" }
+  - { keyword: "rural telehealth", cluster: "rural_teleh", geography_tag: "lmic" }
+  - { keyword: "affordable digital health", cluster: "affordable", geography_tag: "lmic" }
+  - { keyword: "health system digitization", cluster: "digitization", geography_tag: "lmic" }
+  - { keyword: "mobile health infrastructure", cluster: "mobile_infra", geography_tag: "lmic" }
+  - { keyword: "universal health coverage digital", cluster: "uhc_digital", geography_tag: "lmic" }
+
+# ── LIVELLO 5: Germania / Rimborsi (NUOVO) ───────────
+level_5_germany:
+  - { keyword: "DiGA", cluster: "diga", geography_tag: "germany" }
+  - { keyword: "Digitale Gesundheitsanwendung", cluster: "diga", geography_tag: "germany" }
+  - { keyword: "DiPA", cluster: "dipa", geography_tag: "germany" }
+  - { keyword: "Digitale Pflegeanwendung", cluster: "dipa", geography_tag: "germany" }
+  - { keyword: "G-BA", cluster: "gba", geography_tag: "germany" }
+  - { keyword: "Gemeinsamer Bundesausschuss", cluster: "gba", geography_tag: "germany" }
+  - { keyword: "Nutzenbewertung", cluster: "hta_de", geography_tag: "germany" }
+  - { keyword: "AMNOG", cluster: "amnog", geography_tag: "germany" }
+  - { keyword: "SGB V", cluster: "sgb5", geography_tag: "germany" }
+  - { keyword: "Erstattung digital health", cluster: "reimbursement_de", geography_tag: "germany" }
+  - { keyword: "Telemedizin", cluster: "telemed_de", geography_tag: "germany" }
+  - { keyword: "Gesundheitsdatennutzungsgesetz", cluster: "gdng", geography_tag: "germany" }
+  - { keyword: "GDNG", cluster: "gdng", geography_tag: "germany" }
+  - { keyword: "Krankenhauszukunftsgesetz", cluster: "khzg", geography_tag: "germany" }
+  - { keyword: "KHZG", cluster: "khzg", geography_tag: "germany" }
+  - { keyword: "ePA", cluster: "epa", geography_tag: "germany" }
+  - { keyword: "elektronische Patientenakte", cluster: "epa", geography_tag: "germany" }
+  - { keyword: "gematik", cluster: "gematik", geography_tag: "germany" }
+  - { keyword: "Telematikinfrastruktur", cluster: "gematik", geography_tag: "germany" }
+  - { keyword: "Videosprechstunde", cluster: "video_de", geography_tag: "germany" }
+  - { keyword: "Fernbehandlung", cluster: "fernbehandlung", geography_tag: "germany" }
+  - { keyword: "Innovationsfonds", cluster: "innofonds", geography_tag: "germany" }
+  - { keyword: "Methodenbewertung", cluster: "methoden", geography_tag: "germany" }
+  - { keyword: "IQWiG", cluster: "iqwig", geography_tag: "germany" }
+  - { keyword: "BfArM", cluster: "bfarm", geography_tag: "germany" }
+  - { keyword: "Bundesgesundheitsministerium", cluster: "bmg", geography_tag: "germany" }
