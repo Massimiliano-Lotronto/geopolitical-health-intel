@@ -179,7 +179,7 @@ class PubMedCollector(BaseCollector):
             # Prendi l'ultima parte dell'affiliazione (solitamente il paese)
             parts = [p.strip().rstrip(".") for p in affiliation.split(",")]
             if parts:
-                country = parts[-1]
+                country = parts[-1][:95]  # Tronca a 95 char per sicurezza
 
         return {
             "external_id": f"PMID:{pmid}",

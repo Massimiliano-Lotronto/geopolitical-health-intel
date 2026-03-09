@@ -80,11 +80,23 @@ class RSSCollector(BaseCollector):
 
     def fetch(self) -> List[Dict]:
         """Scarica e parsa tutti i feed RSS configurati."""
+        import requests as req
         items = []
+
+        browser_headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, application/atom+xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
 
         for feed_url in self.config.get("feeds", []):
             try:
-                feed = feedparser.parse(feed_url)
+                resp = req.get(feed_url, headers=browser_headers, timeout=15, allow_redirects=True)
+                if resp.status_code != 200:
+                    self.logger.warning(f"  Feed HTTP {resp.status_code}: {feed_url}")
+                    continue
+
+                feed = feedparser.parse(resp.content)
                 for entry in feed.entries:
                     items.append({
                         "title": entry.get("title", ""),

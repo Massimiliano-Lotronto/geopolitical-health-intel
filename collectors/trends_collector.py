@@ -152,10 +152,17 @@ class TrendsCollector(BaseCollector):
                 hl='en-US',
                 tz=0,
                 timeout=(10, 30),
-                retries=2,
-                backoff_factor=1.0,
             )
             return True
+        except TypeError:
+            # Fallback per versioni più recenti di pytrends
+            try:
+                from pytrends.request import TrendReq
+                self.pytrends = TrendReq(hl='en-US', tz=0)
+                return True
+            except Exception as e:
+                self.logger.error(f"  Errore inizializzazione pytrends: {e}")
+                return False
         except Exception as e:
             self.logger.error(f"  Errore inizializzazione pytrends: {e}")
             return False

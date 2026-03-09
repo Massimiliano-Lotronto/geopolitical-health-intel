@@ -66,10 +66,12 @@ def run_pipeline(collectors_only: bool = False, skip_alerts: bool = False):
         ("Fierce Healthcare", "collectors.news_collector", "NewsCollector"),
         ("STAT News", "collectors.news_collector", "NewsCollector"),
         ("Digital Health UK", "collectors.news_collector", "NewsCollector"),
+        ("Digital Health London", "collectors.news_collector", "NewsCollector"),
         ("NHS Digital", "collectors.news_collector", "NewsCollector"),
         ("Rock Health", "collectors.news_collector", "NewsCollector"),
         ("MedTech Intelligence", "collectors.news_collector", "NewsCollector"),
         ("Endpoints News", "collectors.news_collector", "NewsCollector"),
+        ("Digital Health Global", "collectors.news_collector", "NewsCollector"),
         # Google Trends
         ("Google Trends", "collectors.trends_collector", "TrendsCollector"),
     ]

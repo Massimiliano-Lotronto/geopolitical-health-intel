@@ -18,7 +18,7 @@ NEWS_FEEDS = {
     "MobiHealthNews": {
         "feeds": [
             "https://www.mobihealthnews.com/feed",
-            "https://www.mobihealthnews.com/rss.xml",
+            "https://www.mobihealthnews.com/rss-feed",
         ],
         "country": "USA",
         "document_type": "industry_news",
@@ -26,7 +26,7 @@ NEWS_FEEDS = {
     },
     "Healthcare IT News": {
         "feeds": [
-            "https://www.healthcareitnews.com/feed",
+            "https://www.healthcareitnews.com/rss/comments",
             "https://www.healthcareitnews.com/rss.xml",
         ],
         "country": "USA",
@@ -36,7 +36,6 @@ NEWS_FEEDS = {
     "Fierce Healthcare": {
         "feeds": [
             "https://www.fiercehealthcare.com/rss/xml",
-            "https://www.fiercehealthcare.com/feed",
         ],
         "country": "USA",
         "document_type": "industry_news",
@@ -45,6 +44,7 @@ NEWS_FEEDS = {
     "STAT News": {
         "feeds": [
             "https://www.statnews.com/feed/",
+            "https://www.statnews.com/category/pharma/feed/",
         ],
         "filter_keywords": [
             "digital health", "AI", "artificial intelligence", "technology",
@@ -58,10 +58,19 @@ NEWS_FEEDS = {
         "source_category": "news",
     },
 
-    # ── UK / NHS ──
+    # ── UK / NHS / London ──
     "Digital Health UK": {
         "feeds": [
             "https://www.digitalhealth.net/feed/",
+            "https://www.digitalhealth.net/news/feed",
+        ],
+        "country": "UK",
+        "document_type": "industry_news",
+        "source_category": "news",
+    },
+    "Digital Health London": {
+        "feeds": [
+            "https://digitalhealth.london/feed",
         ],
         "country": "UK",
         "document_type": "industry_news",
@@ -70,7 +79,7 @@ NEWS_FEEDS = {
     "NHS Digital": {
         "feeds": [
             "https://digital.nhs.uk/feed",
-            "https://www.nhsx.nhs.uk/feed/",
+            "https://transform.england.nhs.uk/feed/",
         ],
         "country": "UK",
         "document_type": "policy_update",
@@ -105,6 +114,14 @@ NEWS_FEEDS = {
         ],
         "country": "USA",
         "document_type": "pharma_news",
+        "source_category": "competitive",
+    },
+    "Digital Health Global": {
+        "feeds": [
+            "https://digitalhealthglobal.com/feed",
+        ],
+        "country": "International",
+        "document_type": "industry_news",
         "source_category": "competitive",
     },
 
@@ -173,17 +190,31 @@ class NewsCollector(BaseCollector):
         return mapping.get(country, "Global")
 
     def fetch(self) -> List[Dict]:
-        """Scarica feed RSS."""
+        """Scarica feed RSS usando requests con User-Agent da browser."""
+        import requests as req
         items = []
+
+        browser_headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, application/atom+xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
 
         for feed_url in self.config.get("feeds", []):
             try:
-                feed = feedparser.parse(feed_url)
-                if feed.bozo and not feed.entries:
-                    self.logger.warning(f"  Feed non valido: {feed_url}")
+                # Scarica con requests (headers da browser)
+                resp = req.get(feed_url, headers=browser_headers, timeout=15, allow_redirects=True)
+                if resp.status_code != 200:
+                    self.logger.warning(f"  Feed HTTP {resp.status_code}: {feed_url}")
                     continue
 
-                for entry in feed.entries[:30]:  # Max 30 per feed
+                # Passa il contenuto a feedparser (non l'URL)
+                feed = feedparser.parse(resp.content)
+                if feed.bozo and not feed.entries:
+                    self.logger.warning(f"  Feed non valido (parse error): {feed_url}")
+                    continue
+
+                for entry in feed.entries[:30]:
                     items.append({
                         "title": entry.get("title", ""),
                         "link": entry.get("link", ""),
@@ -194,6 +225,10 @@ class NewsCollector(BaseCollector):
                     })
 
                 self.logger.info(f"  Feed {feed_url}: {len(feed.entries)} items")
+            except req.exceptions.Timeout:
+                self.logger.warning(f"  Feed timeout: {feed_url}")
+            except req.exceptions.ConnectionError:
+                self.logger.warning(f"  Feed connessione fallita: {feed_url}")
             except Exception as e:
                 self.logger.warning(f"  Feed fallito {feed_url}: {e}")
 
