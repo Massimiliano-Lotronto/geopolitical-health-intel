@@ -60,6 +60,18 @@ def run_pipeline(collectors_only: bool = False, skip_alerts: bool = False):
         ("WHO Digital Health", "collectors.rss_collector", "RSSCollector"),
         ("BMG Germany", "collectors.rss_collector", "RSSCollector"),
         ("IQWiG", "collectors.rss_collector", "RSSCollector"),
+        # News & Competitive Intelligence
+        ("MobiHealthNews", "collectors.news_collector", "NewsCollector"),
+        ("Healthcare IT News", "collectors.news_collector", "NewsCollector"),
+        ("Fierce Healthcare", "collectors.news_collector", "NewsCollector"),
+        ("STAT News", "collectors.news_collector", "NewsCollector"),
+        ("Digital Health UK", "collectors.news_collector", "NewsCollector"),
+        ("NHS Digital", "collectors.news_collector", "NewsCollector"),
+        ("Rock Health", "collectors.news_collector", "NewsCollector"),
+        ("MedTech Intelligence", "collectors.news_collector", "NewsCollector"),
+        ("Endpoints News", "collectors.news_collector", "NewsCollector"),
+        # Google Trends
+        ("Google Trends", "collectors.trends_collector", "TrendsCollector"),
     ]
 
     for source_name, module_path, class_name in collectors_config:
@@ -67,8 +79,8 @@ def run_pipeline(collectors_only: bool = False, skip_alerts: bool = False):
             module = __import__(module_path, fromlist=[class_name])
             CollectorClass = getattr(module, class_name)
 
-            # RSSCollector richiede source_name come primo argomento
-            if class_name == "RSSCollector":
+            # RSSCollector e NewsCollector richiedono source_name come primo argomento
+            if class_name in ("RSSCollector", "NewsCollector"):
                 collector = CollectorClass(source_name, session)
             else:
                 collector = CollectorClass(session)
