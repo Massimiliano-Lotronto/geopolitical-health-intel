@@ -56,6 +56,7 @@ def run_pipeline(collectors_only: bool = False, skip_alerts: bool = False):
         ("ClinicalTrials.gov", "collectors.clinicaltrials_collector", "ClinicalTrialsCollector"),
         ("Bundestag DIP", "collectors.bundestag_collector", "BundestagCollector"),
         ("G-BA Decisions", "collectors.gba_collector", "GBACollector"),
+        ("BfArM DiGA Directory", "collectors.diga_collector", "DIGACollector"),
         ("FDA Digital Health CoE", "collectors.rss_collector", "RSSCollector"),
         ("WHO Digital Health", "collectors.rss_collector", "RSSCollector"),
         ("BMG Germany", "collectors.rss_collector", "RSSCollector"),
