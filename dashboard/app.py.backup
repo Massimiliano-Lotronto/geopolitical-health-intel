@@ -458,188 +458,35 @@ elif page == "🔬 Science & Trials":
 elif page == "📈 Market Trends":
     st.markdown('<div class="main-header">📈 Market & Trend Signals</div>', unsafe_allow_html=True)
 
-    # Country labels for display
-    COUNTRY_LABELS = {
-        "AT": "Austria", "BE": "Belgium", "BG": "Bulgaria", "HR": "Croatia",
-        "CY": "Cyprus", "CZ": "Czech Republic", "DK": "Denmark", "EE": "Estonia",
-        "FI": "Finland", "FR": "France", "DE": "Germany", "GR": "Greece",
-        "HU": "Hungary", "IE": "Ireland", "IT": "Italy", "LV": "Latvia",
-        "LT": "Lithuania", "LU": "Luxembourg", "MT": "Malta", "NL": "Netherlands",
-        "PL": "Poland", "PT": "Portugal", "RO": "Romania", "SK": "Slovakia",
-        "SI": "Slovenia", "ES": "Spain", "SE": "Sweden",
-        "GB": "United Kingdom", "US": "United States", "IL": "Israel",
-    }
-
-    # Keyword-to-cluster mapping (derived in Python, not in DB)
-    KW_CLUSTER = {
-        "digital therapeutics": "Digital Therapeutics",
-        "DTx": "Digital Therapeutics",
-        "prescription digital therapeutic": "Digital Therapeutics",
-        "software as medical device": "Digital Therapeutics",
-        "digital health app": "Digital Therapeutics",
-        "Alzheimer digital": "Neurodegenerative",
-        "Parkinson digital therapy": "Neurodegenerative",
-        "neurodegenerative treatment": "Neurodegenerative",
-        "dementia technology": "Neurodegenerative",
-        "brain health app": "Neurodegenerative",
-    }
-
     session = get_session_cached()
     try:
-        trends = session.query(TrendsMetric).order_by(desc(TrendsMetric.date)).all()
+        trends = session.query(TrendsMetric).order_by(desc(TrendsMetric.date)).limit(500).all()
 
         if trends:
             df = pd.DataFrame([{
                 "Date": t.date,
                 "Keyword": t.keyword,
-                "Geo": t.geography,
-                "Country": COUNTRY_LABELS.get(t.geography, t.geography),
+                "Geography": t.geography,
                 "Interest": t.interest_score,
-                "Rising": t.is_rising,
-                "Related Topic": t.related_topic,
-                "Cluster": KW_CLUSTER.get(t.keyword, "Other"),
+                "Rising": "🔥" if t.is_rising else "",
             } for t in trends])
 
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            # Filtro keyword
+            keywords = df["Keyword"].unique().tolist()
+            selected_kw = st.multiselect("Select keywords", keywords, default=keywords[:5])
 
-            # ── Filters ──
-            st.markdown("---")
-            col_f1, col_f2, col_f3 = st.columns(3)
+            if selected_kw:
+                df_filtered = df[df["Keyword"].isin(selected_kw)]
+                fig = px.line(df_filtered, x="Date", y="Interest", color="Keyword",
+                              title="Google Trends Interest Over Time")
+                st.plotly_chart(fig, use_container_width=True)
 
-            available_countries = sorted(df["Country"].dropna().unique())
-            available_clusters = sorted(df["Cluster"].dropna().unique())
-            available_keywords = sorted(df["Keyword"].dropna().unique())
-
-            # Smart defaults: pick top markets if available
-            default_countries = [c for c in ["United States", "Germany", "United Kingdom",
-                                              "France", "Italy", "Israel"]
-                                 if c in available_countries]
-            if not default_countries:
-                default_countries = available_countries[:6]
-
-            with col_f1:
-                selected_countries = st.multiselect(
-                    "🌍 Countries", available_countries,
-                    default=default_countries,
-                )
-            with col_f2:
-                selected_clusters = st.multiselect(
-                    "📦 Cluster", available_clusters,
-                    default=available_clusters,
-                )
-            with col_f3:
-                selected_keywords = st.multiselect(
-                    "🔑 Keywords", available_keywords,
-                    default=[],
-                    help="Leave empty = all keywords in selected clusters",
-                )
-
-            # ── Apply filters ──
-            mask = pd.Series(True, index=df.index)
-            if selected_countries:
-                mask &= df["Country"].isin(selected_countries)
-            if selected_clusters:
-                mask &= df["Cluster"].isin(selected_clusters)
-            if selected_keywords:
-                mask &= df["Keyword"].isin(selected_keywords)
-
-            filtered = df[mask].copy()
-            ts_data = filtered[(filtered["Rising"] == False) & (filtered["Interest"].notna())]
-            rising_data = filtered[filtered["Rising"] == True]
-
-            # ── KPIs ──
-            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-            with kpi1:
-                kpi_card("Countries", f"{ts_data['Geo'].nunique()}")
-            with kpi2:
-                kpi_card("Keywords", f"{ts_data['Keyword'].nunique()}")
-            with kpi3:
-                if not ts_data.empty:
-                    latest_date = ts_data["Date"].max()
-                    avg_score = ts_data[ts_data["Date"] == latest_date]["Interest"].mean()
-                    kpi_card("Avg Interest (latest)", f"{avg_score:.0f}")
-                else:
-                    kpi_card("Avg Interest", "N/A")
-            with kpi4:
-                kpi_card("Rising Topics", f"{len(rising_data)}")
-
-            st.divider()
-
-            if not ts_data.empty:
-                # ── Chart 1: Interest over time by Country ──
-                st.subheader("📊 Interest Over Time by Country")
-                agg_country = (
-                    ts_data.groupby(["Date", "Country"])["Interest"]
-                    .mean().reset_index()
-                )
-                fig1 = px.line(
-                    agg_country, x="Date", y="Interest", color="Country",
-                    labels={"Interest": "Interest Score (avg)", "Date": "Date"},
-                    template="plotly_white",
-                )
-                fig1.update_layout(
-                    height=420,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.3,
-                                x=0.5, xanchor="center"),
-                    hovermode="x unified",
-                )
-                st.plotly_chart(fig1, use_container_width=True)
-
-                # ── Chart 2: Interest over time by Keyword ──
-                st.subheader("🔑 Interest Over Time by Keyword")
-                agg_kw = (
-                    ts_data.groupby(["Date", "Keyword"])["Interest"]
-                    .mean().reset_index()
-                )
-                fig2 = px.line(
-                    agg_kw, x="Date", y="Interest", color="Keyword",
-                    labels={"Interest": "Interest Score (avg)", "Date": "Date"},
-                    template="plotly_white",
-                )
-                fig2.update_layout(
-                    height=420,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.4,
-                                x=0.5, xanchor="center"),
-                    hovermode="x unified",
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-
-                # ── Chart 3: Heatmap Country × Keyword ──
-                st.subheader("🗺️ Heatmap — Latest Interest by Country × Keyword")
-                latest = ts_data[ts_data["Date"] == ts_data["Date"].max()]
-                if not latest.empty:
-                    pivot = latest.pivot_table(
-                        index="Country", columns="Keyword",
-                        values="Interest", aggfunc="mean",
-                    )
-                    fig3 = px.imshow(
-                        pivot,
-                        labels=dict(x="Keyword", y="Country", color="Interest"),
-                        color_continuous_scale="YlOrRd",
-                        aspect="auto",
-                    )
-                    fig3.update_layout(height=max(400, len(pivot) * 22))
-                    st.plotly_chart(fig3, use_container_width=True)
-
-            # ── Rising Topics ──
             st.subheader("🔥 Rising Topics")
-            if not rising_data.empty:
-                rising_display = (
-                    rising_data[["Country", "Keyword", "Related Topic", "Date"]]
-                    .sort_values("Date", ascending=False)
-                    .drop_duplicates(subset=["Country", "Keyword", "Related Topic"])
-                    .head(50)
-                )
-                st.dataframe(rising_display, use_container_width=True, hide_index=True)
+            rising = df[df["Rising"] == "🔥"]
+            if not rising.empty:
+                st.dataframe(rising, use_container_width=True)
             else:
                 st.info("Nessun topic in crescita anomala.")
-
-            # ── Raw data ──
-            with st.expander("📋 Raw Data Table"):
-                st.dataframe(
-                    filtered.sort_values("Date", ascending=False).head(500),
-                    use_container_width=True, hide_index=True,
-                )
         else:
             st.info("Nessun dato Google Trends. Esegui il trends collector.")
     finally:
