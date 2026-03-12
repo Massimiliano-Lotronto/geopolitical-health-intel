@@ -79,16 +79,34 @@ st.markdown("""
         background: #FAFAF8;
         border-right: 1px solid #E8E4DF;
     }
+    /* Hide radio circles */
+    section[data-testid="stSidebar"] .stRadio > div {
+    }
+    section[data-testid="stSidebar"] .stRadio > div > label > div:first-child {
+    }
     section[data-testid="stSidebar"] .stRadio label {
         font-family: 'Source Sans Pro', sans-serif;
         font-size: 0.92rem;
         font-weight: 400;
-        color: #4A4A4A;
-        padding: 0.35rem 0;
-        transition: color 0.2s;
+        color: #7F8C8D;
+        padding: 0.6rem 0.9rem;
+        margin: 1px 0;
+        border-left: 3px solid transparent;
+        border-radius: 0 6px 6px 0;
+        transition: all 0.2s ease;
+        cursor: pointer;
     }
     section[data-testid="stSidebar"] .stRadio label:hover {
         color: #0D2B45;
+        background: rgba(13,43,69,0.04);
+        border-left-color: #B0BEC5;
+    }
+    section[data-testid="stSidebar"] .stRadio label[data-checked="true"],
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
+        color: #0D2B45;
+        font-weight: 600;
+        background: rgba(13,43,69,0.06);
+        border-left-color: #1A6B8A;
     }
     section[data-testid="stSidebar"] h1 {
         font-family: 'Playfair Display', serif;
