@@ -77,19 +77,45 @@ COUNTRIES = {
 
 # Keyword clusters (used for dashboard filtering, not stored in DB)
 KEYWORD_CLUSTERS = {
-    "digital_therapeutics": [
+    "digital_health": [
         "digital therapeutics",
-        "DTx",
-        "prescription digital therapeutic",
+        "digital health regulation",
         "software as medical device",
-        "digital health app",
+        "digital health app CE mark",
+        "DiGA digital health",
     ],
     "neurodegenerative": [
         "Alzheimer digital",
         "Parkinson digital therapy",
-        "neurodegenerative treatment",
-        "dementia technology",
-        "brain health app",
+        "ALS assistive technology",
+        "Huntington disease monitoring",
+        "multiple sclerosis digital",
+        "frontotemporal dementia",
+        "Lewy body dementia diagnosis",
+        "cerebellar ataxia wearable",
+    ],
+    "psychiatric": [
+        "digital mental health",
+        "depression digital therapy",
+        "postpartum depression digital",
+        "schizophrenia digital biomarker",
+        "ADHD digital therapeutic",
+        "anxiety disorder app",
+        "bipolar disorder digital",
+    ],
+    "biobank_data": [
+        "health data biobank",
+        "neurodegenerative biobank",
+        "brain imaging database",
+        "real world data neurodegeneration",
+        "health data governance",
+    ],
+    "regulation": [
+        "EU health data space",
+        "EHDS regulation",
+        "AI act medical device",
+        "digital health reimbursement",
+        "health data interoperability",
     ],
 }
 
@@ -123,13 +149,7 @@ def _sleep_between_requests():
 
 def _build_pytrends():
     """Create a fresh TrendReq session (helps avoid 429 blocks)."""
-    return TrendReq(
-        hl="en-US",
-        tz=0,
-        timeout=(10, 30),
-        retries=2,
-        backoff_factor=1.0,
-    )
+    return TrendReq(hl="en-US", tz=0, timeout=(10, 30))
 
 
 def fetch_interest_for_keyword(pytrends: TrendReq, keyword: str, geo: str):
