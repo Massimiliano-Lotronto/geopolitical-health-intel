@@ -1104,7 +1104,7 @@ elif page == "⚠️ Cyber Attack Radar":
                 "Source": s.source_name,
                 "Country": d.country or "",
                 "URL": d.url or "",
-                "Summary": (d.abstract or "")[:120],
+                "Summary": (d.summary or "")[:120],
             } for d, s in cyber_docs])
 
             # ── Threat type classification ──
@@ -1161,6 +1161,24 @@ elif page == "⚠️ Cyber Attack Radar":
                                   font=dict(family="Source Sans Pro", size=11),
                                   paper_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig, use_container_width=True)
+
+            # ── Geographic Map ──
+            section_header("Global Threat Map")
+            country_counts = df["Country"].value_counts().reset_index()
+            country_counts.columns = ["Country", "Count"]
+            if not country_counts.empty and country_counts["Country"].str.len().max() > 0:
+                fig_map = px.choropleth(
+                    country_counts,
+                    locations="Country",
+                    locationmode="country names",
+                    color="Count",
+                    color_continuous_scale=["#FAFAF8", "#E8A838", "#D35C5C", "#0D2B45"],
+                    labels={"Count": "Alerts"},
+                )
+                style_plotly(fig_map, height=400)
+                fig_map.update_layout(geo=dict(bgcolor="rgba(0,0,0,0)", lakecolor="#FAFAF8",
+                                               showframe=False, projection_type="natural earth"))
+                st.plotly_chart(fig_map, use_container_width=True)
 
             # ── Timeline ──
             section_header("Threat Timeline")
