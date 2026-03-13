@@ -1374,6 +1374,42 @@ elif page == "⚠️ Cyber Attack Radar":
                 st.plotly_chart(fig_map, use_container_width=True)
                 st.caption("🔴 Red = attack origins · 🔷 Blue = targets · Line thickness = attack volume")
 
+            # ── Live Threat Maps ──
+            section_header("Live Global Threat Maps")
+            st.caption("Real-time cyber threat visualizations from leading security vendors")
+
+            map_tab1, map_tab2, map_tab3, map_tab4 = st.tabs([
+                "Kaspersky", "Check Point", "Radware", "NETSCOUT"
+            ])
+
+            with map_tab1:
+                st.components.v1.iframe(
+                    "https://cybermap.kaspersky.com/widget",
+                    height=450, scrolling=False,
+                )
+                st.caption("Source: Kaspersky Cyberthreat Real-Time Map")
+
+            with map_tab2:
+                st.components.v1.iframe(
+                    "https://threatmap.checkpoint.com/",
+                    height=450, scrolling=False,
+                )
+                st.caption("Source: Check Point ThreatCloud Live Map")
+
+            with map_tab3:
+                st.components.v1.iframe(
+                    "https://livethreatmap.radware.com/",
+                    height=450, scrolling=False,
+                )
+                st.caption("Source: Radware Live Threat Map")
+
+            with map_tab4:
+                st.components.v1.iframe(
+                    "https://horizon.netscout.com/",
+                    height=450, scrolling=False,
+                )
+                st.caption("Source: NETSCOUT Cyber Threat Horizon")
+
             # ── Sankey Diagram ──
             # Prepare data: origin → target with attack counts
             sankey_data = (
