@@ -73,6 +73,7 @@ COUNTRIES = {
     "GB": "United Kingdom",
     "US": "United States",
     "IL": "Israel",
+    "AL": "Albania",
 }
 
 # Keyword clusters (used for dashboard filtering, not stored in DB)
