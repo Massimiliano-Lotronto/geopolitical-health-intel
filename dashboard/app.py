@@ -1286,7 +1286,7 @@ elif page == "⚠️ Cyber Attack Radar":
                 df_flows.groupby(["origin_country_name", "target_country"])["attack_count"]
                 .sum().reset_index()
             )
-            arc_data = arc_data[arc_data["attack_count"] > 0].nlargest(60, "attack_count")
+            arc_data = arc_data[arc_data["attack_count"] > 0].nlargest(100, "attack_count")
 
             if not arc_data.empty:
                 fig_map = go.Figure()
@@ -1306,8 +1306,9 @@ elif page == "⚠️ Cyber Attack Radar":
                     t_lat, t_lon = TARGET_COORDS[target]
 
                     # Line width proportional to attacks
-                    width = max(0.5, (attacks / max_attacks) * 4)
-                    opacity = max(0.15, min(0.7, attacks / max_attacks))
+                    import math
+                    width = max(0.8, math.log1p(attacks) / math.log1p(max_attacks) * 5)
+                    opacity = max(0.25, min(0.8, math.log1p(attacks) / math.log1p(max_attacks)))
 
                     fig_map.add_trace(go.Scattergeo(
                         lon=[o_lon, t_lon],
