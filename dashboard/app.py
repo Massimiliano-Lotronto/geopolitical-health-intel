@@ -1378,37 +1378,30 @@ elif page == "⚠️ Cyber Attack Radar":
             section_header("Live Global Threat Maps")
             st.caption("Real-time cyber threat visualizations from leading security vendors")
 
-            map_tab1, map_tab2, map_tab3, map_tab4 = st.tabs([
-                "Kaspersky", "Check Point", "Radware", "NETSCOUT"
-            ])
+            map_tab1, map_tab2 = st.tabs(["Check Point", "Radware"])
 
             with map_tab1:
-                st.components.v1.iframe(
-                    "https://cybermap.kaspersky.com/widget",
-                    height=450, scrolling=False,
-                )
-                st.caption("Source: Kaspersky Cyberthreat Real-Time Map")
-
-            with map_tab2:
                 st.components.v1.iframe(
                     "https://threatmap.checkpoint.com/",
                     height=450, scrolling=False,
                 )
                 st.caption("Source: Check Point ThreatCloud Live Map")
 
-            with map_tab3:
+            with map_tab2:
                 st.components.v1.iframe(
                     "https://livethreatmap.radware.com/",
                     height=450, scrolling=False,
                 )
                 st.caption("Source: Radware Live Threat Map")
 
-            with map_tab4:
-                st.components.v1.iframe(
-                    "https://horizon.netscout.com/",
-                    height=450, scrolling=False,
-                )
-                st.caption("Source: NETSCOUT Cyber Threat Horizon")
+            st.markdown("""
+            <div style="margin-top:0.8rem; font-size:0.85rem; color:#7F8C8D;">
+                <strong>Other live maps:</strong>
+                <a href="https://cybermap.kaspersky.com/" target="_blank" style="color:#1A6B8A;">Kaspersky</a> &middot;
+                <a href="https://horizon.netscout.com/" target="_blank" style="color:#1A6B8A;">NETSCOUT</a> &middot;
+                <a href="https://www.digitalattackmap.com/" target="_blank" style="color:#1A6B8A;">Digital Attack Map</a>
+            </div>
+            """, unsafe_allow_html=True)
 
             # ── Sankey Diagram ──
             # Prepare data: origin → target with attack counts
