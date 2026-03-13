@@ -1,6 +1,7 @@
 # ======================================================
 # GitHub Actions - Pipeline automatica
 # Esegue collector + tagger + scorer + alerts
+# + Cyber collector + Trends collector + AbuseIPDB
 # Schedule: ogni 12 ore
 # ======================================================
 
@@ -15,7 +16,7 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -30,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run pipeline
+      - name: Run main pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
@@ -43,6 +44,23 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ALERT_RECIPIENTS: ${{ secrets.ALERT_RECIPIENTS }}
         run: python main.py
+
+      - name: Run cyber collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -c "from collectors.cyber_collector import run; run()"
+
+      - name: Run trends collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python -c "from collectors.trends_collector import run; run()"
+
+      - name: Run AbuseIPDB collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+        run: python -c "from collectors.abuseipdb_collector import run; run()"
 
       - name: Upload logs
         if: always()
