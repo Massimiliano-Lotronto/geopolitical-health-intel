@@ -1997,10 +1997,10 @@ elif page == "🌍 LMIC Digital MH":
 
 
 # ════════════════════════════════════════════════════════
-# PAGE 11: CHATHAM HOUSE
+# PAGE 11: CHATHAM HOUSE (enhanced v2.0)
 # ════════════════════════════════════════════════════════
 elif page == "🏛️ Chatham House":
-    page_header("Chatham House", "Digital health & healthcare policy analysis from the Royal Institute of International Affairs")
+    page_header("Chatham House", "Healthcare intelligence from the Royal Institute of International Affairs")
 
     session = get_session_cached()
     try:
@@ -2009,115 +2009,537 @@ elif page == "🏛️ Chatham House":
             .join(Source, Document.source_id == Source.source_id)
             .filter(Document.document_type == "chatham_house")
             .order_by(desc(Document.publish_date))
-            .limit(200)
+            .limit(500)
             .all()
         )
 
         if ch_docs:
-            df = pd.DataFrame([{
+            df_ch = pd.DataFrame([{
                 "Date": d.publish_date,
-                "Title": d.title,
+                "Title": d.title or "",
                 "Source": s.source_name,
                 "URL": d.url or "",
                 "Summary": (d.summary or ""),
             } for d, s in ch_docs])
 
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            df_ch["Date"] = pd.to_datetime(df_ch["Date"], errors="coerce")
+            df_ch["Full_Text"] = (df_ch["Title"] + " " + df_ch["Summary"]).str.lower()
 
-            # Extract tags from summaries
             import re as re_ch
-            def extract_tags(summary):
-                match = re_ch.match(r"\[Tags:\s*(.+?)\]", summary)
-                if match:
-                    return [t.strip() for t in match.group(1).split(",")]
-                return []
+            from collections import Counter
 
-            def clean_summary(summary):
-                return re_ch.sub(r"\[Tags:\s*(.+?)\]\s*", "", summary)
+            # ── HEALTHCARE FILTER: keep only health-related articles ──
+            HEALTH_KEYWORDS = [
+                "health", "healthcare", "medical", "medicine", "clinical",
+                "hospital", "patient", "disease", "pandemic", "epidemic",
+                "vaccine", "vaccination", "immuniz", "pharma", "drug",
+                "therapeut", "diagnos", "treatment", "surgery", "surgical",
+                "mental health", "wellbeing", "well-being",
+                "who ", "world health", "nhs", "cdc",
+                "biotech", "genomic", "gene therapy", "crispr",
+                "telemedicine", "telehealth", "digital health", "ehealth",
+                "e-health", "mhealth", "m-health", "wearable", "health tech",
+                "health data", "electronic health", "ehr ", "emr ",
+                "antimicrobial", "antibiotic", "amr ", "biosecurity",
+                "nutrition", "obesity", "diabetes", "cancer", "oncolog",
+                "cardiovascular", "heart disease", "stroke",
+                "maternal", "child health", "infant mortalit", "neonatal",
+                "ageing", "aging", "elderly", "dementia", "alzheimer",
+                "health system", "universal health", "health coverage",
+                "health equit", "health access", "health financ",
+                "health workforce", "nursing", "physician",
+                "public health", "epidemiol", "surveillance",
+                "sanitation", "clean water", "hygiene",
+                "tobacco", "alcohol", "substance",
+                "disability", "rehabilitation",
+                "health security", "health emergency", "outbreak",
+                "covid", "coronavirus", "sars", "mers", "influenza", "flu ",
+                "malaria", "tuberculosis", "hiv", "aids",
+                "neglected tropical", "polio", "ebola", "mpox", "monkeypox",
+            ]
 
-            df["Tags"] = df["Summary"].apply(extract_tags)
-            df["Clean Summary"] = df["Summary"].apply(clean_summary)
+            df_ch["is_health"] = df_ch["Full_Text"].apply(
+                lambda txt: any(kw in txt for kw in HEALTH_KEYWORDS)
+            )
+            df_health = df_ch[df_ch["is_health"]].copy()
 
-            # KPIs
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                kpi_card("Total Articles", str(len(df)))
-            with col2:
-                this_month = len(df[df["Date"] >= pd.Timestamp.now() - pd.Timedelta(days=30)])
-                kpi_card("This Month", str(this_month))
-            with col3:
-                all_tags = [t for tags in df["Tags"] for t in tags]
-                kpi_card("Topics Covered", str(len(set(all_tags))))
+            if df_health.empty:
+                st.warning("No healthcare-related articles found among Chatham House content.")
+                st.info(f"Total Chatham House articles: {len(df_ch)}")
+            else:
+                # ── TOPIC CLASSIFICATION (healthcare-specific) ──
+                TOPIC_KEYWORDS = {
+                    "Digital Health & Health Tech": ["digital health", "telemedicine", "telehealth", "ehealth", "e-health", "mhealth", "m-health", "wearable", "health tech", "health data", "electronic health", "ehr ", "emr ", "ai health", "artificial intelligence"],
+                    "Pandemic Preparedness": ["pandemic", "epidemic", "outbreak", "preparedness", "health emergency", "covid", "coronavirus", "sars", "mers", "influenza", "health security", "biosecurity"],
+                    "Global Health Policy": ["who ", "world health", "universal health", "health coverage", "health system", "health reform", "global health", "health governance"],
+                    "Pharma & Biotech": ["pharma", "drug", "vaccine", "vaccination", "biotech", "genomic", "gene therapy", "crispr", "therapeut", "clinical trial"],
+                    "Infectious Disease": ["malaria", "tuberculosis", "hiv", "aids", "neglected tropical", "polio", "ebola", "mpox", "monkeypox", "antibiotic", "antimicrobial", "amr "],
+                    "Mental Health": ["mental health", "wellbeing", "well-being", "psycholog", "psychiatr", "depression", "anxiety", "suicide"],
+                    "NCDs & Chronic Disease": ["cancer", "oncolog", "diabetes", "cardiovascular", "heart disease", "stroke", "obesity", "tobacco", "alcohol", "chronic"],
+                    "Health Equity & Access": ["health equit", "health access", "health financ", "health workforce", "nursing", "physician", "inequality", "disparit"],
+                    "Maternal & Child Health": ["maternal", "child health", "infant mortalit", "neonatal", "reproductive", "family planning"],
+                    "Ageing & Dementia": ["ageing", "aging", "elderly", "dementia", "alzheimer", "older people", "geriatr"],
+                    "Health & Climate": ["climate", "environment", "air quality", "pollution", "heat", "water", "sanitation"],
+                    "Public Health": ["public health", "epidemiol", "surveillance", "nutrition", "hygiene", "prevention", "screening"],
+                }
 
-            st.markdown("<br>", unsafe_allow_html=True)
+                def extract_topics(text):
+                    text_lower = text.lower()
+                    topics = []
+                    for topic, keywords in TOPIC_KEYWORDS.items():
+                        if any(kw in text_lower for kw in keywords):
+                            topics.append(topic)
+                    return topics if topics else ["General Healthcare"]
 
-            # Timeline
-            section_header("Publication Timeline")
-            df_timeline = df.dropna(subset=["Date"])
-            if not df_timeline.empty:
-                df_monthly = (
-                    df_timeline.groupby(pd.Grouper(key="Date", freq="M"))
-                    .size().reset_index(name="Count")
-                )
-                fig = px.bar(df_monthly, x="Date", y="Count",
-                             color_discrete_sequence=["#0D2B45"])
-                style_plotly(fig, height=300)
-                fig.update_layout(xaxis_title="", yaxis_title="Articles")
-                st.plotly_chart(fig, use_container_width=True)
+                df_health["Topics"] = df_health["Full_Text"].apply(extract_topics)
+                df_health["PrimaryTopic"] = df_health["Topics"].apply(lambda x: x[0])
 
-            # Topic analysis
-            if all_tags:
-                section_header("Top Topics")
-                from collections import Counter
-                tag_counts = Counter(all_tags).most_common(15)
-                df_tags = pd.DataFrame(tag_counts, columns=["Topic", "Count"])
-                fig_tags = px.bar(df_tags, x="Count", y="Topic", orientation="h",
-                                   color="Count",
-                                   color_continuous_scale=["#1A6B8A", "#0D2B45"])
-                style_plotly(fig_tags, height=400)
-                fig_tags.update_layout(showlegend=False)
-                st.plotly_chart(fig_tags, use_container_width=True)
+                all_topics = [t for topics in df_health["Topics"] for t in topics]
+                topic_counts_all = Counter(all_topics)
 
-            # Articles list
-            section_header("Latest Articles")
-            for _, row in df.head(30).iterrows():
-                tags_html = ""
-                if row["Tags"]:
-                    tags_html = " ".join(
-                        f'<span style="background:#EBF5FB; color:#1A6B8A; padding:2px 8px; '
-                        f'border-radius:12px; font-size:0.72rem; margin-right:3px;">{t}</span>'
-                        for t in row["Tags"][:5]
+                # Palette colori (healthcare-themed)
+                palette = [
+                    "#0D7C66", "#1E3A5F", "#E85D04", "#7B2D8E",
+                    "#D4A017", "#2E86AB", "#A23B72", "#F18F01",
+                    "#C73E1D", "#44AF69", "#ECA72C", "#226F54",
+                    "#DA627D", "#4A4E69", "#00B4D8", "#3B1F2B",
+                ]
+
+                # ════════════════════════════════════════
+                # FILTRI INTERATTIVI
+                # ════════════════════════════════════════
+                section_header("🔍 Filters")
+
+                fcol1, fcol2, fcol3 = st.columns([2, 2, 2])
+
+                with fcol1:
+                    unique_topics = sorted(set(all_topics))
+                    selected_topics = st.multiselect(
+                        "📌 Filter by health topic",
+                        options=unique_topics,
+                        default=[],
+                        help="Leave empty for all"
                     )
 
-                date_str = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
+                with fcol2:
+                    valid_dates = df_health["Date"].dropna()
+                    if not valid_dates.empty:
+                        min_d = valid_dates.min().date()
+                        max_d = valid_dates.max().date()
+                        date_range = st.date_input(
+                            "📅 Date range",
+                            value=(min_d, max_d),
+                            min_value=min_d,
+                            max_value=max_d,
+                        )
+                    else:
+                        date_range = None
 
-                st.markdown(f"""
-                <div style="background:#FFFFFF; border:1px solid #E8E4DF;
-                            padding:1rem 1.2rem; margin:0.4rem 0; border-radius:6px;
-                            transition: box-shadow 0.2s;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                        <a href="{row['URL']}" target="_blank"
-                           style="color:#0D2B45; font-weight:600; font-size:0.95rem;
-                                  text-decoration:none;">
-                            {row['Title'][:120]}
-                        </a>
-                        <span style="color:#95A5A6; font-size:0.75rem; white-space:nowrap;
-                                     margin-left:1rem;">{date_str}</span>
-                    </div>
-                    <div style="margin:0.3rem 0;">{tags_html}</div>
-                    <div style="color:#7F8C8D; font-size:0.85rem; line-height:1.5;
-                                margin-top:0.3rem;">
-                        {row['Clean Summary'][:200]}{'...' if len(row['Clean Summary']) > 200 else ''}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                with fcol3:
+                    keyword_search = st.text_input(
+                        "🔎 Keyword search",
+                        placeholder="e.g. pandemic, vaccine, digital health...",
+                        help="Search in titles and summaries"
+                    )
 
-            # Full table
-            with st.expander("All Articles Table"):
-                st.dataframe(
-                    df[["Date", "Title", "Source"]].sort_values("Date", ascending=False),
-                    use_container_width=True, hide_index=True,
+                # Applica filtri
+                filtered = df_health.copy()
+                if selected_topics:
+                    filtered = filtered[filtered["Topics"].apply(
+                        lambda topics: any(t in selected_topics for t in topics)
+                    )]
+                if date_range and len(date_range) == 2:
+                    d_start, d_end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
+                    filtered = filtered[
+                        (filtered["Date"] >= d_start) & (filtered["Date"] <= d_end)
+                    ]
+                if keyword_search.strip():
+                    kw = keyword_search.strip().lower()
+                    mask = filtered["Full_Text"].str.contains(kw, na=False)
+                    filtered = filtered[mask]
+
+                filtered_topics = [t for topics in filtered["Topics"] for t in topics]
+                filtered_topic_counts = Counter(filtered_topics)
+
+                st.caption(f"**{len(filtered)}** healthcare articles out of {len(df_ch)} total Chatham House articles")
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # KPIs
+                # ════════════════════════════════════════
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    kpi_card("Health Articles", str(len(filtered)))
+                with col2:
+                    this_month = len(filtered[filtered["Date"] >= pd.Timestamp.now() - pd.Timedelta(days=30)])
+                    kpi_card("This Month", str(this_month))
+                with col3:
+                    kpi_card("Health Topics", str(len(set(filtered_topics))))
+                with col4:
+                    vd = filtered["Date"].dropna()
+                    if not vd.empty:
+                        span = (vd.max() - vd.min()).days
+                        kpi_card("Time Span", f"{span} days")
+                    else:
+                        kpi_card("Time Span", "N/A")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ════════════════════════════════════════
+                # ROW 1: TREEMAP + SUNBURST
+                # ════════════════════════════════════════
+                section_header("🗺️ Healthcare Topic Distribution")
+
+                col_tree, col_sun = st.columns(2)
+
+                with col_tree:
+                    st.markdown("##### 🌳 Health Topic Treemap")
+                    if filtered_topic_counts:
+                        tc_df = pd.DataFrame(
+                            filtered_topic_counts.most_common(20),
+                            columns=["Topic", "Count"]
+                        )
+                        fig_tree = px.treemap(
+                            tc_df, path=["Topic"], values="Count",
+                            color="Count",
+                            color_continuous_scale=["#0D7C66", "#1E3A5F", "#E85D04", "#7B2D8E"],
+                        )
+                        fig_tree.update_traces(
+                            textinfo="label+value",
+                            textfont_size=13,
+                            marker=dict(cornerradius=5),
+                        )
+                        style_plotly(fig_tree, height=420)
+                        fig_tree.update_layout(
+                            margin=dict(t=10, l=10, r=10, b=10),
+                            coloraxis_showscale=False,
+                        )
+                        st.plotly_chart(fig_tree, use_container_width=True)
+                    else:
+                        st.info("No topic data available.")
+
+                with col_sun:
+                    st.markdown("##### ☀️ Sunburst – Source / Health Topic")
+                    sun_rows = []
+                    for _, row in filtered.iterrows():
+                        src = row["Source"]
+                        for t in row["Topics"]:
+                            sun_rows.append({"Source": src, "Topic": t})
+                    if sun_rows:
+                        sun_df = pd.DataFrame(sun_rows)
+                        sun_agg = sun_df.groupby(["Source", "Topic"]).size().reset_index(name="Count")
+                        fig_sun = px.sunburst(
+                            sun_agg, path=["Source", "Topic"], values="Count",
+                            color="Count",
+                            color_continuous_scale=["#2E86AB", "#E85D04", "#7B2D8E"],
+                        )
+                        fig_sun.update_traces(textfont_size=12)
+                        style_plotly(fig_sun, height=420)
+                        fig_sun.update_layout(
+                            margin=dict(t=10, l=10, r=10, b=10),
+                            coloraxis_showscale=False,
+                        )
+                        st.plotly_chart(fig_sun, use_container_width=True)
+                    else:
+                        st.info("No data for sunburst chart.")
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # ROW 2: SCATTER TIMELINE
+                # ════════════════════════════════════════
+                section_header("⏱️ Healthcare Timeline")
+
+                tl = filtered.dropna(subset=["Date"]).copy()
+                if not tl.empty:
+                    tl["TopicCount"] = tl["Topics"].apply(len).clip(lower=1)
+
+                    fig_scatter = px.scatter(
+                        tl, x="Date", y="PrimaryTopic",
+                        size="TopicCount", color="PrimaryTopic",
+                        hover_name="Title",
+                        color_discrete_sequence=palette,
+                        size_max=18, opacity=0.8,
+                    )
+                    style_plotly(fig_scatter, height=400)
+                    fig_scatter.update_layout(
+                        xaxis_title="", yaxis_title="",
+                        showlegend=False,
+                        margin=dict(l=10, r=10, t=10, b=40),
+                    )
+                    fig_scatter.update_xaxes(dtick="M1", tickformat="%b %Y")
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                else:
+                    st.info("No dated articles for timeline.")
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # ROW 3: WORD CLOUD + FREQUENCY
+                # ════════════════════════════════════════
+                section_header("💬 Text Analysis")
+
+                corpus = " ".join(
+                    filtered["Title"].dropna().tolist() +
+                    filtered["Summary"].dropna().tolist()
+                ).lower()
+
+                stop_words = {
+                    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to",
+                    "for", "of", "with", "by", "from", "is", "it", "this", "that",
+                    "are", "was", "were", "be", "been", "being", "have", "has",
+                    "had", "do", "does", "did", "will", "would", "could", "should",
+                    "may", "might", "shall", "can", "need", "not", "no", "its",
+                    "as", "if", "than", "then", "so", "up", "out", "about", "into",
+                    "over", "after", "under", "between", "through", "during",
+                    "before", "above", "below", "more", "most", "other", "some",
+                    "such", "only", "own", "same", "also", "how", "all", "each",
+                    "every", "both", "few", "many", "much", "any", "which", "what",
+                    "who", "whom", "when", "where", "why", "their", "them", "they",
+                    "he", "she", "we", "you", "his", "her", "our", "your", "s",
+                    "new", "one", "two", "us", "my", "me", "these", "those",
+                    "chatham", "house", "international", "affairs", "think", "tank",
+                }
+
+                words = re_ch.findall(r"[a-z]{3,}", corpus)
+                words = [w for w in words if w not in stop_words]
+                word_freq = Counter(words)
+                top_words = word_freq.most_common(30)
+
+                wc_col, freq_col = st.columns(2)
+
+                with wc_col:
+                    st.markdown("##### ☁️ Word Cloud")
+                    if top_words:
+                        try:
+                            from wordcloud import WordCloud
+                            import matplotlib.pyplot as plt
+
+                            wc = WordCloud(
+                                width=800, height=400,
+                                background_color="white",
+                                colormap="viridis",
+                                max_words=80,
+                                prefer_horizontal=0.7,
+                                min_font_size=8,
+                                contour_width=1,
+                                contour_color="#0D7C66",
+                            ).generate_from_frequencies(dict(top_words))
+                            fig_wc, ax_wc = plt.subplots(figsize=(10, 5))
+                            ax_wc.imshow(wc, interpolation="bilinear")
+                            ax_wc.axis("off")
+                            st.pyplot(fig_wc, use_container_width=True)
+                            plt.close(fig_wc)
+                        except ImportError:
+                            st.info("Install `wordcloud` for cloud viz: `pip install wordcloud`")
+                            tw_df = pd.DataFrame(top_words[:15], columns=["Word", "Count"])
+                            fig_fb = px.bar(
+                                tw_df, x="Count", y="Word", orientation="h",
+                                color="Count", color_continuous_scale=["#0D7C66", "#E85D04"],
+                            )
+                            style_plotly(fig_fb, height=350)
+                            fig_fb.update_layout(showlegend=False, coloraxis_showscale=False)
+                            st.plotly_chart(fig_fb, use_container_width=True)
+                    else:
+                        st.info("No text data for word cloud.")
+
+                with freq_col:
+                    st.markdown("##### 📊 Top 20 Words")
+                    if top_words:
+                        tw_df = pd.DataFrame(top_words[:20], columns=["Word", "Frequency"])
+                        fig_freq = px.bar(
+                            tw_df, x="Frequency", y="Word", orientation="h",
+                            color="Frequency",
+                            color_continuous_scale=["#2E86AB", "#0D7C66", "#E85D04"],
+                            text="Frequency",
+                        )
+                        fig_freq.update_traces(textposition="outside", textfont_size=11)
+                        style_plotly(fig_freq, height=480)
+                        fig_freq.update_layout(
+                            yaxis=dict(autorange="reversed"),
+                            showlegend=False, coloraxis_showscale=False,
+                            margin=dict(l=10, r=60, t=10, b=10),
+                        )
+                        st.plotly_chart(fig_freq, use_container_width=True)
+                    else:
+                        st.info("No text data for frequency chart.")
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # ROW 4: KEYWORD TREND
+                # ════════════════════════════════════════
+                section_header("📈 Health Keyword Trends Over Time")
+
+                top_kw = [w for w, _ in top_words[:8]]
+                tl_kw = filtered.dropna(subset=["Date"]).copy()
+
+                if not tl_kw.empty and top_kw:
+                    tl_kw["YM"] = tl_kw["Date"].dt.to_period("M").astype(str)
+
+                    kw_rows = []
+                    for _, row in tl_kw.iterrows():
+                        txt = row["Full_Text"]
+                        for kw in top_kw:
+                            if kw in txt:
+                                kw_rows.append({"Month": row["YM"], "Keyword": kw})
+
+                    if kw_rows:
+                        kw_df = pd.DataFrame(kw_rows)
+                        kw_agg = kw_df.groupby(["Month", "Keyword"]).size().reset_index(name="Mentions")
+                        fig_trend = px.line(
+                            kw_agg, x="Month", y="Mentions", color="Keyword",
+                            markers=True, color_discrete_sequence=palette,
+                        )
+                        style_plotly(fig_trend, height=380)
+                        fig_trend.update_layout(
+                            xaxis_title="Month", yaxis_title="Mentions",
+                            legend=dict(
+                                orientation="h", yanchor="bottom", y=1.02,
+                                xanchor="center", x=0.5, font=dict(size=11),
+                            ),
+                            margin=dict(l=10, r=10, t=40, b=10),
+                        )
+                        st.plotly_chart(fig_trend, use_container_width=True)
+                    else:
+                        st.info("No keyword trends detected.")
+                else:
+                    st.info("Insufficient data for keyword trends.")
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # ROW 5: HEATMAP MESE x TOPIC
+                # ════════════════════════════════════════
+                section_header("🔥 Seasonality Heatmap – Month × Health Topic")
+
+                heat = filtered.dropna(subset=["Date"]).copy()
+                if not heat.empty and filtered_topics:
+                    heat_rows = []
+                    for _, row in heat.iterrows():
+                        for t in row["Topics"]:
+                            heat_rows.append({
+                                "Month": row["Date"].strftime("%b"),
+                                "MonthNum": row["Date"].month,
+                                "Topic": t,
+                            })
+                    if heat_rows:
+                        heat_df = pd.DataFrame(heat_rows)
+                        heat_pivot = heat_df.pivot_table(
+                            index="Topic", columns="Month",
+                            values="MonthNum", aggfunc="count", fill_value=0
+                        )
+                        month_order = ["Jan","Feb","Mar","Apr","May","Jun",
+                                       "Jul","Aug","Sep","Oct","Nov","Dec"]
+                        ordered = [m for m in month_order if m in heat_pivot.columns]
+                        heat_pivot = heat_pivot[ordered]
+
+                        top_tp = [t for t, _ in filtered_topic_counts.most_common(15)]
+                        heat_pivot = heat_pivot[heat_pivot.index.isin(top_tp)]
+
+                        if not heat_pivot.empty:
+                            fig_heat = px.imshow(
+                                heat_pivot.values,
+                                x=heat_pivot.columns.tolist(),
+                                y=heat_pivot.index.tolist(),
+                                color_continuous_scale=["#F0F4F8", "#2E86AB", "#0D7C66", "#E85D04"],
+                                aspect="auto", text_auto=True,
+                            )
+                            style_plotly(fig_heat, height=max(300, len(heat_pivot) * 35 + 80))
+                            fig_heat.update_layout(
+                                xaxis_title="Month", yaxis_title="",
+                                coloraxis_showscale=False,
+                                margin=dict(l=10, r=10, t=10, b=40),
+                            )
+                            st.plotly_chart(fig_heat, use_container_width=True)
+                        else:
+                            st.info("No data for heatmap.")
+                    else:
+                        st.info("No data for heatmap.")
+                else:
+                    st.info("Insufficient data for heatmap.")
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # PUBLICATION TIMELINE
+                # ════════════════════════════════════════
+                section_header("📅 Publication Timeline")
+                df_timeline = filtered.dropna(subset=["Date"])
+                if not df_timeline.empty:
+                    df_monthly = (
+                        df_timeline.groupby(pd.Grouper(key="Date", freq="M"))
+                        .size().reset_index(name="Count")
+                    )
+                    fig_tl = px.bar(
+                        df_monthly, x="Date", y="Count",
+                        color_discrete_sequence=["#0D7C66"],
+                    )
+                    style_plotly(fig_tl, height=300)
+                    fig_tl.update_layout(xaxis_title="", yaxis_title="Articles")
+                    st.plotly_chart(fig_tl, use_container_width=True)
+
+                st.markdown("---")
+
+                # ════════════════════════════════════════
+                # ARTICLE CARDS
+                # ════════════════════════════════════════
+                section_header("📰 Healthcare Articles")
+
+                sort_opt = st.selectbox(
+                    "Sort by", ["Most recent", "Alphabetical"], index=0,
                 )
+                if sort_opt == "Most recent":
+                    display = filtered.sort_values("Date", ascending=False)
+                else:
+                    display = filtered.sort_values("Title")
+
+                PAGE_SIZE = 12
+                total_pages = max(1, -(-len(display) // PAGE_SIZE))
+                page_num = st.number_input(
+                    "Page", min_value=1, max_value=total_pages, value=1, step=1
+                )
+                start_idx = (page_num - 1) * PAGE_SIZE
+                page_slice = display.iloc[start_idx : start_idx + PAGE_SIZE]
+
+                for _, row in page_slice.iterrows():
+                    topics_html = " ".join(
+                        f'<span style="background:#EBF5FB; color:#1A6B8A; padding:2px 8px; '
+                        f'border-radius:12px; font-size:0.72rem; margin-right:3px;">{t}</span>'
+                        for t in row["Topics"][:5]
+                    )
+                    date_str = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
+                    summary_text = row["Summary"].replace("Chatham House", "").strip()
+
+                    st.markdown(f"""
+                    <div style="background:#FFFFFF; border-left:4px solid #0D7C66;
+                                padding:1rem 1.2rem; margin:0.4rem 0; border-radius:0 6px 6px 0;
+                                box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <a href="{row['URL']}" target="_blank"
+                               style="color:#0D2B45; font-weight:600; font-size:0.95rem;
+                                      text-decoration:none;">
+                                {row['Title'][:120]}
+                            </a>
+                            <span style="color:#95A5A6; font-size:0.75rem; white-space:nowrap;
+                                         margin-left:1rem;">{date_str}</span>
+                        </div>
+                        <div style="margin:0.3rem 0;">{topics_html}</div>
+                        <div style="color:#7F8C8D; font-size:0.85rem; line-height:1.5;
+                                    margin-top:0.3rem;">
+                            {summary_text[:200]}{'...' if len(summary_text) > 200 else ''}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.caption(f"Page {page_num} of {total_pages} — {len(display)} healthcare articles")
+
+                # Full table
+                with st.expander("📋 Full Articles Table"):
+                    st.dataframe(
+                        filtered[["Date", "Title", "PrimaryTopic", "Source"]].sort_values("Date", ascending=False),
+                        use_container_width=True, hide_index=True,
+                    )
         else:
             st.info("No Chatham House articles yet. Run the collector:")
             st.code('python -c "from collectors.chatham_collector import run; run()"')
