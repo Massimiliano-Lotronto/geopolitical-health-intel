@@ -69,3 +69,8 @@ jobs:
           name: pipeline-log-${{ github.run_number }}
           path: pipeline.log
           retention-days: 14
+
+      - name: Run Chatham House collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -c "from collectors.chatham_collector import run; run()"
