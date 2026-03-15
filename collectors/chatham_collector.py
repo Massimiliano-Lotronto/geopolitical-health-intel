@@ -29,14 +29,14 @@ BROWSER_HEADERS = {
 }
 
 RSS_FEEDS = {
-    "Chatham House": {
-        "url": "https://www.chathamhouse.org/rss",
+    "Chatham House via Google News": {
+        "url": "https://news.google.com/rss/search?q=site:chathamhouse.org+health&hl=en-US&gl=US&ceid=US:en",
         "source_type": "think_tank",
         "region": "Europe",
         "country": "United Kingdom",
     },
-    "Chatham House Publications": {
-        "url": "https://www.chathamhouse.org/publications/rss",
+    "Chatham House Global Health": {
+        "url": "https://news.google.com/rss/search?q=chatham+house+global+health+digital&hl=en-US&gl=US&ceid=US:en",
         "source_type": "think_tank",
         "region": "Europe",
         "country": "United Kingdom",
@@ -113,7 +113,7 @@ def collect_rss():
                         continue
                     if doc_exists(session, url):
                         continue
-                    if not is_health_relevant(title, summary_text):
+                    if False:
                         continue
 
                     pub_date = None
