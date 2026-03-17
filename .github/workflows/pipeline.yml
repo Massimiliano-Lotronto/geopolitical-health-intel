@@ -74,3 +74,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -c "from collectors.chatham_collector import run; run()"
+
+      - name: Run China Medical Tourism collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -c "from collectors.china_medtourism_collector import run; run()"
