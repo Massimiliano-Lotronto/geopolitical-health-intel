@@ -305,6 +305,7 @@ with st.sidebar:
             "⚠️ Cyber Attack Radar",
             "🌍 LMIC Digital MH",
             "🏛️ Chatham House",
+            "🇨🇳 China Health",
         ],
         label_visibility="collapsed",
     )
@@ -1997,43 +1998,153 @@ elif page == "🌍 LMIC Digital MH":
 
 
 # ════════════════════════════════════════════════════════
-# PAGE 11: CHATHAM HOUSE (enhanced v3.0)
+# PAGE 11: CHATHAM HOUSE
 # ════════════════════════════════════════════════════════
 elif page == "🏛️ Chatham House":
-    page_header("Chatham House", "Healthcare intelligence from the Royal Institute of International Affairs")
+    page_header("Chatham House", "Digital health & healthcare policy analysis from the Royal Institute of International Affairs")
 
     session = get_session_cached()
     try:
-        # ── Ensure tables exist ──
+        ch_docs = (
+            session.query(Document, Source)
+            .join(Source, Document.source_id == Source.source_id)
+            .filter(Document.document_type == "chatham_house")
+            .order_by(desc(Document.publish_date))
+            .limit(200)
+            .all()
+        )
+
+        if ch_docs:
+            df = pd.DataFrame([{
+                "Date": d.publish_date,
+                "Title": d.title,
+                "Source": s.source_name,
+                "URL": d.url or "",
+                "Summary": (d.summary or ""),
+            } for d, s in ch_docs])
+
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+            # Extract tags from summaries
+            import re as re_ch
+            def extract_tags(summary):
+                match = re_ch.match(r"\[Tags:\s*(.+?)\]", summary)
+                if match:
+                    return [t.strip() for t in match.group(1).split(",")]
+                return []
+
+            def clean_summary(summary):
+                return re_ch.sub(r"\[Tags:\s*(.+?)\]\s*", "", summary)
+
+            df["Tags"] = df["Summary"].apply(extract_tags)
+            df["Clean Summary"] = df["Summary"].apply(clean_summary)
+
+            # KPIs
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                kpi_card("Total Articles", str(len(df)))
+            with col2:
+                this_month = len(df[df["Date"] >= pd.Timestamp.now() - pd.Timedelta(days=30)])
+                kpi_card("This Month", str(this_month))
+            with col3:
+                all_tags = [t for tags in df["Tags"] for t in tags]
+                kpi_card("Topics Covered", str(len(set(all_tags))))
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Timeline
+            section_header("Publication Timeline")
+            df_timeline = df.dropna(subset=["Date"])
+            if not df_timeline.empty:
+                df_monthly = (
+                    df_timeline.groupby(pd.Grouper(key="Date", freq="M"))
+                    .size().reset_index(name="Count")
+                )
+                fig = px.bar(df_monthly, x="Date", y="Count",
+                             color_discrete_sequence=["#0D2B45"])
+                style_plotly(fig, height=300)
+                fig.update_layout(xaxis_title="", yaxis_title="Articles")
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Topic analysis
+            if all_tags:
+                section_header("Top Topics")
+                from collections import Counter
+                tag_counts = Counter(all_tags).most_common(15)
+                df_tags = pd.DataFrame(tag_counts, columns=["Topic", "Count"])
+                fig_tags = px.bar(df_tags, x="Count", y="Topic", orientation="h",
+                                   color="Count",
+                                   color_continuous_scale=["#1A6B8A", "#0D2B45"])
+                style_plotly(fig_tags, height=400)
+                fig_tags.update_layout(showlegend=False)
+                st.plotly_chart(fig_tags, use_container_width=True)
+
+            # Articles list
+            section_header("Latest Articles")
+            for _, row in df.head(30).iterrows():
+                tags_html = ""
+                if row["Tags"]:
+                    tags_html = " ".join(
+                        f'<span style="background:#EBF5FB; color:#1A6B8A; padding:2px 8px; '
+                        f'border-radius:12px; font-size:0.72rem; margin-right:3px;">{t}</span>'
+                        for t in row["Tags"][:5]
+                    )
+
+                date_str = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
+
+                st.markdown(f"""
+                <div style="background:#FFFFFF; border:1px solid #E8E4DF;
+                            padding:1rem 1.2rem; margin:0.4rem 0; border-radius:6px;
+                            transition: box-shadow 0.2s;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <a href="{row['URL']}" target="_blank"
+                           style="color:#0D2B45; font-weight:600; font-size:0.95rem;
+                                  text-decoration:none;">
+                            {row['Title'][:120]}
+                        </a>
+                        <span style="color:#95A5A6; font-size:0.75rem; white-space:nowrap;
+                                     margin-left:1rem;">{date_str}</span>
+                    </div>
+                    <div style="margin:0.3rem 0;">{tags_html}</div>
+                    <div style="color:#7F8C8D; font-size:0.85rem; line-height:1.5;
+                                margin-top:0.3rem;">
+                        {row['Clean Summary'][:200]}{'...' if len(row['Clean Summary']) > 200 else ''}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Full table
+            with st.expander("All Articles Table"):
+                st.dataframe(
+                    df[["Date", "Title", "Source"]].sort_values("Date", ascending=False),
+                    use_container_width=True, hide_index=True,
+                )
+        else:
+            st.info("No Chatham House articles yet. Run the collector:")
+            st.code('python -c "from collectors.chatham_collector import run; run()"')
+
+    finally:
+        session.close()
+
+    page_footer()
+
+# PAGE 12: CHINA HEALTH - Medical Tourism & Neurodegenerative Research
+# ════════════════════════════════════════════════════════
+elif page == "🇨🇳 China Health":
+    page_header("China Health Intelligence", "Medical tourism, digital health, neurodegenerative research & international patient flows")
+
+    session = get_session_cached()
+    try:
+        # ── Ensure notes tables exist ──
         from sqlalchemy import text as sa_text
         try:
-            session.execute(sa_text("""
-                CREATE TABLE IF NOT EXISTS chatham_notes (
-                    note_id SERIAL PRIMARY KEY,
-                    document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
-                    note_text TEXT,
-                    private_url TEXT,
-                    ai_keywords TEXT,
-                    ai_countries TEXT,
-                    ai_sentiment VARCHAR(20),
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW()
-                )
-            """))
-            session.execute(sa_text("""
-                CREATE TABLE IF NOT EXISTS chatham_private_links (
-                    link_id SERIAL PRIMARY KEY,
-                    url TEXT NOT NULL,
-                    title TEXT,
-                    description TEXT,
-                    ai_keywords TEXT,
-                    ai_countries TEXT,
-                    ai_summary TEXT,
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            """))
-            session.execute(sa_text("CREATE INDEX IF NOT EXISTS idx_chatham_notes_doc ON chatham_notes(document_id)"))
-            session.execute(sa_text("CREATE INDEX IF NOT EXISTS idx_chatham_links_created ON chatham_private_links(created_at)"))
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS china_health_notes (
+                note_id SERIAL PRIMARY KEY, document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
+                note_text TEXT, private_url TEXT, ai_keywords TEXT, ai_countries TEXT,
+                created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"""))
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS china_health_links (
+                link_id SERIAL PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT,
+                link_category VARCHAR(50), ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW())"""))
             session.commit()
         except Exception:
             session.rollback()
@@ -2041,840 +2152,705 @@ elif page == "🏛️ Chatham House":
         ch_docs = (
             session.query(Document, Source)
             .join(Source, Document.source_id == Source.source_id)
-            .filter(Document.document_type == "chatham_house")
+            .filter(Document.document_type == "china_medtourism")
             .order_by(desc(Document.publish_date))
             .limit(500)
             .all()
         )
 
         if ch_docs:
-            df_ch = pd.DataFrame([{
-                "DocID": d.document_id,
-                "Date": d.publish_date,
-                "Title": d.title or "",
-                "Source": s.source_name,
-                "URL": d.url or "",
-                "Summary": (d.summary or ""),
-                "Country": (d.country or ""),
+            df_cn = pd.DataFrame([{
+                "DocID": d.document_id, "Date": d.publish_date,
+                "Title": d.title or "", "Source": s.source_name,
+                "URL": d.url or "", "Summary": (d.summary or ""),
+                "Country": (d.country or "China"),
             } for d, s in ch_docs])
 
-            df_ch["Date"] = pd.to_datetime(df_ch["Date"], errors="coerce")
-            df_ch["Full_Text"] = (df_ch["Title"] + " " + df_ch["Summary"]).str.lower()
+            df_cn["Date"] = pd.to_datetime(df_cn["Date"], errors="coerce")
+            df_cn["Full_Text"] = (df_cn["Title"] + " " + df_cn["Summary"]).str.lower()
 
-            import re as re_ch
+            import re as re_cn
+            import math
             from collections import Counter
+            import plotly.graph_objects as go
 
-            # ── HEALTHCARE FILTER ──
-            HEALTH_KEYWORDS = [
-                "health", "healthcare", "medical", "medicine", "clinical",
-                "hospital", "patient", "disease", "pandemic", "epidemic",
-                "vaccine", "vaccination", "immuniz", "pharma", "drug",
-                "therapeut", "diagnos", "treatment", "surgery", "surgical",
-                "mental health", "wellbeing", "well-being",
-                "who ", "world health", "nhs", "cdc",
-                "biotech", "genomic", "gene therapy", "crispr",
-                "telemedicine", "telehealth", "digital health", "ehealth",
-                "e-health", "mhealth", "m-health", "wearable", "health tech",
-                "health data", "electronic health", "ehr ", "emr ",
-                "antimicrobial", "antibiotic", "amr ", "biosecurity",
-                "nutrition", "obesity", "diabetes", "cancer", "oncolog",
-                "cardiovascular", "heart disease", "stroke",
-                "maternal", "child health", "infant mortalit", "neonatal",
-                "ageing", "aging", "elderly", "dementia", "alzheimer",
-                "health system", "universal health", "health coverage",
-                "health equit", "health access", "health financ",
-                "health workforce", "nursing", "physician",
-                "public health", "epidemiol", "surveillance",
-                "sanitation", "clean water", "hygiene",
-                "tobacco", "alcohol", "substance",
-                "disability", "rehabilitation",
-                "health security", "health emergency", "outbreak",
-                "covid", "coronavirus", "sars", "mers", "influenza", "flu ",
-                "malaria", "tuberculosis", "hiv", "aids",
-                "neglected tropical", "polio", "ebola", "mpox", "monkeypox",
-            ]
+            # ── TOPIC CLASSIFICATION ──
+            CN_TOPICS = {
+                "Medical Tourism": ["medical tourism", "foreign patient", "international patient", "medical travel", "health tourism", "medical visitor"],
+                "Digital Health & AI": ["digital health", "telemedicine", "telehealth", "ai health", "artificial intelligence", "wearable", "health tech", "health data", "remote monitoring"],
+                "Neurodegenerative Disease": ["alzheimer", "parkinson", "dementia", "neurodegen", "motor neuron", "als ", "amyotrophic", "huntington", "cognitive impairment", "neurolog"],
+                "Stem Cell Therapy": ["stem cell", "cell therapy", "regenerat", "ipsc", "mesenchymal", "gene therapy", "crispr"],
+                "Psychiatric Services": ["psychiatric", "mental health", "depression", "anxiety", "psycholog", "bipolar", "schizophren"],
+                "Traditional Chinese Medicine": ["traditional chinese", "tcm", "acupuncture", "herbal medicine", "moxibustion"],
+                "Cancer Treatment": ["cancer", "oncolog", "tumor", "chemotherapy", "radiotherapy", "immunotherapy"],
+                "Hospital Infrastructure": ["hospital", "medical center", "jci accredit", "infrastructure", "medical zone"],
+                "Payment & Insurance": ["payment", "insurance", "cost", "afford", "price", "billing", "medical bill"],
+                "Data & Privacy": ["data", "privacy", "electronic health record", "patient data", "cross-border data"],
+                "Follow-up & Telemedicine": ["follow-up", "remote care", "post-treatment", "aftercare", "distance care"],
+                "Policy & Regulation": ["policy", "regulation", "government", "reform", "pilot zone", "free trade", "visa"],
+            }
 
-            df_ch["is_health"] = df_ch["Full_Text"].apply(
-                lambda txt: any(kw in txt for kw in HEALTH_KEYWORDS)
-            )
-            df_health = df_ch[df_ch["is_health"]].copy()
+            HOSPITALS = {
+                "Peking Union Medical College Hospital": ["peking union", "pumch"],
+                "Beijing Tiantan Hospital": ["tiantan"],
+                "Shanghai Ruijin Hospital": ["ruijin"],
+                "Fudan University Shanghai Cancer Center": ["fudan cancer", "fudan university"],
+                "West China Hospital (Sichuan)": ["west china hospital", "huaxi"],
+                "Zhongshan Hospital Shanghai": ["zhongshan"],
+                "Boao Lecheng Medical Zone": ["boao", "lecheng"],
+                "Shenzhen Qianhai Taikang Hospital": ["qianhai taikang"],
+                "Peking University Shenzhen Hospital": ["peking university shenzhen"],
+                "United Family Healthcare": ["united family"],
+                "Perennial General Hospital Tianjin": ["perennial", "tianjin hospital"],
+                "Shanghai Huashan Hospital": ["huashan"],
+                "Renji Hospital Shanghai": ["renji"],
+                "Longhua TCM Hospital": ["longhua"],
+            }
 
-            if df_health.empty:
-                st.warning("No healthcare-related articles found among Chatham House content.")
-                st.info(f"Total Chatham House articles: {len(df_ch)}")
-            else:
-                # ── TOPIC CLASSIFICATION ──
-                TOPIC_KEYWORDS = {
-                    "Digital Health & Health Tech": ["digital health", "telemedicine", "telehealth", "ehealth", "e-health", "mhealth", "m-health", "wearable", "health tech", "health data", "electronic health", "ehr ", "emr ", "artificial intelligence"],
-                    "Pandemic Preparedness": ["pandemic", "epidemic", "outbreak", "preparedness", "health emergency", "covid", "coronavirus", "sars", "mers", "influenza", "health security", "biosecurity"],
-                    "Global Health Policy": ["who ", "world health", "universal health", "health coverage", "health system", "health reform", "global health", "health governance"],
-                    "Pharma & Biotech": ["pharma", "drug", "vaccine", "vaccination", "biotech", "genomic", "gene therapy", "crispr", "therapeut", "clinical trial"],
-                    "Infectious Disease": ["malaria", "tuberculosis", "hiv", "aids", "neglected tropical", "polio", "ebola", "mpox", "monkeypox", "antibiotic", "antimicrobial", "amr "],
-                    "Mental Health": ["mental health", "wellbeing", "well-being", "psycholog", "psychiatr", "depression", "anxiety"],
-                    "NCDs & Chronic Disease": ["cancer", "oncolog", "diabetes", "cardiovascular", "heart disease", "stroke", "obesity", "tobacco", "alcohol", "chronic"],
-                    "Health Equity & Access": ["health equit", "health access", "health financ", "health workforce", "nursing", "physician", "inequality", "disparit"],
-                    "Maternal & Child Health": ["maternal", "child health", "infant mortalit", "neonatal", "reproductive", "family planning"],
-                    "Ageing & Dementia": ["ageing", "aging", "elderly", "dementia", "alzheimer", "older people", "geriatr"],
-                    "Health & Climate": ["climate", "environment", "air quality", "pollution", "heat", "water", "sanitation"],
-                    "Public Health": ["public health", "epidemiol", "surveillance", "nutrition", "hygiene", "prevention", "screening"],
-                }
+            REGIONS = {
+                "Beijing": ["beijing"], "Shanghai": ["shanghai"],
+                "Guangzhou": ["guangzhou", "guangdong"], "Shenzhen": ["shenzhen"],
+                "Hainan": ["hainan", "boao", "lecheng"], "Tianjin": ["tianjin"],
+                "Chengdu": ["chengdu", "sichuan"], "Wuhan": ["wuhan", "hubei"],
+                "Hangzhou": ["hangzhou", "zhejiang"], "Nanjing": ["nanjing", "jiangsu"],
+                "Fangchenggang": ["fangchenggang", "guangxi"], "Xi'an": ["xi'an", "shaanxi"],
+            }
 
-                def extract_topics(text):
-                    text_lower = text.lower()
-                    topics = []
-                    for topic, keywords in TOPIC_KEYWORDS.items():
-                        if any(kw in text_lower for kw in keywords):
-                            topics.append(topic)
-                    return topics if topics else ["General Healthcare"]
+            # ── ORIGIN COUNTRY EXTRACTION (source countries of medical tourists) ──
+            ORIGIN_COUNTRIES = {
+                "Russia": ["russia", "russian", "moscow"],
+                "Vietnam": ["vietnam", "vietnamese"],
+                "Indonesia": ["indonesia", "indonesian", "jakarta"],
+                "Malaysia": ["malaysia", "malaysian"],
+                "Singapore": ["singapore", "singaporean"],
+                "Thailand": ["thailand", "thai"],
+                "Philippines": ["philippines", "filipino"],
+                "Cambodia": ["cambodia", "cambodian"],
+                "Myanmar": ["myanmar", "burmese"],
+                "Kazakhstan": ["kazakhstan", "kazakh"],
+                "Uzbekistan": ["uzbekistan", "uzbek"],
+                "Mongolia": ["mongolia", "mongolian"],
+                "South Korea": ["south korea", "korean"],
+                "Japan": ["japan", "japanese"],
+                "India": ["india", "indian"],
+                "Pakistan": ["pakistan", "pakistani"],
+                "Bangladesh": ["bangladesh", "bangladeshi"],
+                "Saudi Arabia": ["saudi", "saudi arabia"],
+                "UAE": ["uae", "emirates", "dubai", "abu dhabi"],
+                "Kuwait": ["kuwait", "kuwaiti"],
+                "Qatar": ["qatar", "qatari"],
+                "Iran": ["iran", "iranian"],
+                "Iraq": ["iraq", "iraqi"],
+                "Nigeria": ["nigeria", "nigerian"],
+                "Kenya": ["kenya", "kenyan"],
+                "South Africa": ["south africa"],
+                "Ethiopia": ["ethiopia", "ethiopian"],
+                "Tanzania": ["tanzania"],
+                "United States": ["united states", "american", "usa", "u.s."],
+                "Canada": ["canada", "canadian"],
+                "United Kingdom": ["united kingdom", "british", "uk "],
+                "Australia": ["australia", "australian"],
+                "France": ["france", "french"],
+                "Germany": ["germany", "german"],
+            }
 
-                # ── COUNTRY EXTRACTION ──
-                COUNTRY_MAP = {
-                    "united states": "United States", "usa": "United States", "us ": "United States", "america": "United States",
-                    "united kingdom": "United Kingdom", "uk ": "United Kingdom", "britain": "United Kingdom", "england": "United Kingdom",
-                    "china": "China", "chinese": "China", "beijing": "China",
-                    "russia": "Russia", "russian": "Russia", "moscow": "Russia",
-                    "india": "India", "indian": "India",
-                    "brazil": "Brazil", "brazilian": "Brazil",
-                    "germany": "Germany", "german": "Germany",
-                    "france": "France", "french": "France",
-                    "japan": "Japan", "japanese": "Japan",
-                    "south korea": "South Korea", "korea": "South Korea",
-                    "australia": "Australia", "australian": "Australia",
-                    "canada": "Canada", "canadian": "Canada",
-                    "italy": "Italy", "italian": "Italy",
-                    "spain": "Spain", "spanish": "Spain",
-                    "mexico": "Mexico", "mexican": "Mexico",
-                    "indonesia": "Indonesia",
-                    "turkey": "Turkey", "turkish": "Turkey",
-                    "saudi arabia": "Saudi Arabia", "saudi": "Saudi Arabia",
-                    "iran": "Iran", "iranian": "Iran",
-                    "israel": "Israel", "israeli": "Israel",
-                    "ukraine": "Ukraine", "ukrainian": "Ukraine",
-                    "poland": "Poland", "polish": "Poland",
-                    "nigeria": "Nigeria", "nigerian": "Nigeria",
-                    "south africa": "South Africa",
-                    "egypt": "Egypt", "egyptian": "Egypt",
-                    "kenya": "Kenya", "kenyan": "Kenya",
-                    "ethiopia": "Ethiopia",
-                    "pakistan": "Pakistan",
-                    "bangladesh": "Bangladesh",
-                    "vietnam": "Vietnam",
-                    "thailand": "Thailand",
-                    "philippines": "Philippines",
-                    "colombia": "Colombia",
-                    "argentina": "Argentina",
-                    "chile": "Chile",
-                    "peru": "Peru",
-                    "taiwan": "Taiwan",
-                    "singapore": "Singapore",
-                    "malaysia": "Malaysia",
-                    "ghana": "Ghana",
-                    "tanzania": "Tanzania",
-                    "uganda": "Uganda",
-                    "rwanda": "Rwanda",
-                    "congo": "DR Congo",
-                    "morocco": "Morocco",
-                    "tunisia": "Tunisia",
-                    "iraq": "Iraq",
-                    "syria": "Syria",
-                    "yemen": "Yemen",
-                    "afghanistan": "Afghanistan",
-                    "myanmar": "Myanmar",
-                    "cambodia": "Cambodia",
-                    "nepal": "Nepal",
-                    "sri lanka": "Sri Lanka",
-                    "sweden": "Sweden",
-                    "norway": "Norway",
-                    "denmark": "Denmark",
-                    "finland": "Finland",
-                    "netherlands": "Netherlands", "dutch": "Netherlands",
-                    "belgium": "Belgium",
-                    "switzerland": "Switzerland", "swiss": "Switzerland",
-                    "austria": "Austria",
-                    "portugal": "Portugal",
-                    "greece": "Greece",
-                    "ireland": "Ireland",
-                    "czech": "Czech Republic",
-                    "hungary": "Hungary",
-                    "romania": "Romania",
-                    "africa": "Africa (continent)",
-                    "europe": "Europe (continent)",
-                    "asia": "Asia (continent)",
-                    "latin america": "Latin America",
-                    "middle east": "Middle East",
-                    "gaza": "Palestine", "palestine": "Palestine",
-                }
+            ORIGIN_COORDS = {
+                "Russia": (61.5, 105.3), "Vietnam": (14.1, 108.3), "Indonesia": (-0.8, 113.9),
+                "Malaysia": (4.2, 101.9), "Singapore": (1.4, 103.8), "Thailand": (15.9, 100.9),
+                "Philippines": (12.9, 121.8), "Cambodia": (12.6, 105.0), "Myanmar": (21.9, 95.9),
+                "Kazakhstan": (48.0, 68.0), "Uzbekistan": (41.3, 64.6), "Mongolia": (46.9, 103.8),
+                "South Korea": (35.9, 127.8), "Japan": (36.2, 138.3), "India": (20.6, 78.9),
+                "Pakistan": (30.4, 69.3), "Bangladesh": (23.7, 90.4),
+                "Saudi Arabia": (23.9, 45.1), "UAE": (23.4, 53.8), "Kuwait": (29.3, 47.5),
+                "Qatar": (25.4, 51.2), "Iran": (32.4, 53.7), "Iraq": (33.2, 43.7),
+                "Nigeria": (9.1, 8.7), "Kenya": (-0.02, 37.9), "South Africa": (-30.6, 22.9),
+                "Ethiopia": (9.1, 40.5), "Tanzania": (-6.4, 34.9),
+                "United States": (39.8, -98.5), "Canada": (56.1, -106.3),
+                "United Kingdom": (55.4, -3.4), "Australia": (-25.3, 133.8),
+                "France": (46.2, 2.2), "Germany": (51.2, 10.4),
+            }
 
-                # Country coordinates for map
-                COUNTRY_COORDS = {
-                    "United States": (39.8, -98.5), "United Kingdom": (55.4, -3.4),
-                    "China": (35.9, 104.2), "Russia": (61.5, 105.3),
-                    "India": (20.6, 78.9), "Brazil": (-14.2, -51.9),
-                    "Germany": (51.2, 10.4), "France": (46.2, 2.2),
-                    "Japan": (36.2, 138.3), "South Korea": (35.9, 127.8),
-                    "Australia": (-25.3, 133.8), "Canada": (56.1, -106.3),
-                    "Italy": (41.9, 12.6), "Spain": (40.5, -3.7),
-                    "Mexico": (23.6, -102.6), "Indonesia": (-0.8, 113.9),
-                    "Turkey": (39.0, 35.2), "Saudi Arabia": (23.9, 45.1),
-                    "Iran": (32.4, 53.7), "Israel": (31.0, 34.9),
-                    "Ukraine": (48.4, 31.2), "Poland": (51.9, 19.1),
-                    "Nigeria": (9.1, 8.7), "South Africa": (-30.6, 22.9),
-                    "Egypt": (26.8, 30.8), "Kenya": (-0.02, 37.9),
-                    "Ethiopia": (9.1, 40.5), "Pakistan": (30.4, 69.3),
-                    "Bangladesh": (23.7, 90.4), "Vietnam": (14.1, 108.3),
-                    "Thailand": (15.9, 100.9), "Philippines": (12.9, 121.8),
-                    "Colombia": (4.6, -74.3), "Argentina": (-38.4, -63.6),
-                    "Chile": (-35.7, -71.5), "Peru": (-9.2, -75.0),
-                    "Taiwan": (23.7, 121.0), "Singapore": (1.4, 103.8),
-                    "Malaysia": (4.2, 101.9), "Ghana": (7.9, -1.0),
-                    "Tanzania": (-6.4, 34.9), "Uganda": (1.4, 32.3),
-                    "Rwanda": (-1.9, 29.9), "DR Congo": (-4.0, 21.8),
-                    "Morocco": (31.8, -7.1), "Tunisia": (33.9, 9.5),
-                    "Iraq": (33.2, 43.7), "Syria": (35.0, 38.5),
-                    "Yemen": (15.6, 48.5), "Afghanistan": (33.9, 67.7),
-                    "Myanmar": (21.9, 95.9), "Cambodia": (12.6, 105.0),
-                    "Nepal": (28.4, 84.1), "Sri Lanka": (7.9, 80.8),
-                    "Sweden": (60.1, 18.6), "Norway": (60.5, 8.5),
-                    "Denmark": (56.3, 9.5), "Finland": (61.9, 25.7),
-                    "Netherlands": (52.1, 5.3), "Belgium": (50.5, 4.5),
-                    "Switzerland": (46.8, 8.2), "Austria": (47.5, 14.6),
-                    "Portugal": (39.4, -8.2), "Greece": (39.1, 21.8),
-                    "Ireland": (53.1, -7.7), "Czech Republic": (49.8, 15.5),
-                    "Hungary": (47.2, 19.5), "Romania": (45.9, 25.0),
-                    "Palestine": (31.9, 35.2),
-                }
+            # Region groupings for Sankey
+            ORIGIN_REGIONS = {
+                "Southeast Asia": ["Vietnam", "Indonesia", "Malaysia", "Singapore", "Thailand", "Philippines", "Cambodia", "Myanmar"],
+                "Central Asia": ["Kazakhstan", "Uzbekistan", "Mongolia"],
+                "East Asia": ["South Korea", "Japan"],
+                "South Asia": ["India", "Pakistan", "Bangladesh"],
+                "Middle East": ["Saudi Arabia", "UAE", "Kuwait", "Qatar", "Iran", "Iraq"],
+                "Africa": ["Nigeria", "Kenya", "South Africa", "Ethiopia", "Tanzania"],
+                "Russia & CIS": ["Russia"],
+                "Western Countries": ["United States", "Canada", "United Kingdom", "Australia", "France", "Germany"],
+            }
 
-                def extract_countries(text):
-                    text_lower = text.lower()
-                    found = set()
-                    for keyword, country in COUNTRY_MAP.items():
-                        if keyword in text_lower and not country.endswith("(continent)"):
-                            found.add(country)
-                    return list(found)
+            def extract_cn_topics(text):
+                topics = []
+                for topic, kws in CN_TOPICS.items():
+                    if any(kw in text for kw in kws):
+                        topics.append(topic)
+                return topics if topics else ["General"]
 
-                df_health["Topics"] = df_health["Full_Text"].apply(extract_topics)
-                df_health["PrimaryTopic"] = df_health["Topics"].apply(lambda x: x[0])
-                df_health["Countries"] = df_health["Full_Text"].apply(extract_countries)
+            def extract_hospitals(text):
+                return [h for h, kws in HOSPITALS.items() if any(kw in text for kw in kws)]
 
-                all_topics = [t for topics in df_health["Topics"] for t in topics]
-                all_countries = [c for countries in df_health["Countries"] for c in countries]
-                topic_counts_all = Counter(all_topics)
-                country_counts_all = Counter(all_countries)
+            def extract_regions(text):
+                return [r for r, kws in REGIONS.items() if any(kw in text for kw in kws)]
 
-                palette = [
-                    "#0D7C66", "#1E3A5F", "#E85D04", "#7B2D8E",
-                    "#D4A017", "#2E86AB", "#A23B72", "#F18F01",
-                    "#C73E1D", "#44AF69", "#ECA72C", "#226F54",
-                    "#DA627D", "#4A4E69", "#00B4D8", "#3B1F2B",
-                ]
+            def extract_origins(text):
+                return list(set(c for c, kws in ORIGIN_COUNTRIES.items() if any(kw in text for kw in kws)))
 
-                # ════════════════════════════════════════
-                # TABS LAYOUT
-                # ════════════════════════════════════════
-                tab_analysis, tab_notes, tab_links = st.tabs([
-                    "📊 Analysis & Charts",
-                    "📝 Notes & AI Analysis",
-                    "🔗 Private Links"
-                ])
+            def get_origin_region(country):
+                for region, countries in ORIGIN_REGIONS.items():
+                    if country in countries:
+                        return region
+                return "Other"
 
-                # ════════════════════════════════════════════════
-                # TAB 1: ANALYSIS & CHARTS
-                # ════════════════════════════════════════════════
-                with tab_analysis:
+            df_cn["Topics"] = df_cn["Full_Text"].apply(extract_cn_topics)
+            df_cn["PrimaryTopic"] = df_cn["Topics"].apply(lambda x: x[0])
+            df_cn["Hospitals"] = df_cn["Full_Text"].apply(extract_hospitals)
+            df_cn["Regions"] = df_cn["Full_Text"].apply(extract_regions)
+            df_cn["Origins"] = df_cn["Full_Text"].apply(extract_origins)
+            df_cn["OriginRegions"] = df_cn["Origins"].apply(lambda os: list(set(get_origin_region(o) for o in os)))
 
-                    # FILTRI
-                    section_header("🔍 Filters")
-                    fcol1, fcol2, fcol3 = st.columns([2, 2, 2])
-                    with fcol1:
-                        unique_topics = sorted(set(all_topics))
-                        selected_topics = st.multiselect(
-                            "📌 Filter by health topic", options=unique_topics,
-                            default=[], help="Leave empty for all"
-                        )
-                    with fcol2:
-                        valid_dates = df_health["Date"].dropna()
-                        if not valid_dates.empty:
-                            min_d, max_d = valid_dates.min().date(), valid_dates.max().date()
-                            date_range = st.date_input("📅 Date range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
-                        else:
-                            date_range = None
-                    with fcol3:
-                        keyword_search = st.text_input("🔎 Keyword search", placeholder="e.g. pandemic, vaccine...")
+            all_topics = [t for ts in df_cn["Topics"] for t in ts]
+            all_hospitals = [h for hs in df_cn["Hospitals"] for h in hs]
+            all_regions = [r for rs in df_cn["Regions"] for r in rs]
+            all_origins = [o for os in df_cn["Origins"] for o in os]
+            all_origin_regions = [r for rs in df_cn["OriginRegions"] for r in rs]
 
-                    filtered = df_health.copy()
-                    if selected_topics:
-                        filtered = filtered[filtered["Topics"].apply(lambda t: any(x in selected_topics for x in t))]
-                    if date_range and len(date_range) == 2:
-                        d_s, d_e = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
-                        filtered = filtered[(filtered["Date"] >= d_s) & (filtered["Date"] <= d_e)]
-                    if keyword_search.strip():
-                        filtered = filtered[filtered["Full_Text"].str.contains(keyword_search.strip().lower(), na=False)]
+            palette = ["#C73E1D", "#D4A017", "#0D7C66", "#1E3A5F", "#E85D04", "#7B2D8E",
+                        "#2E86AB", "#A23B72", "#F18F01", "#44AF69", "#ECA72C", "#226F54",
+                        "#DA627D", "#4A4E69", "#00B4D8", "#3B1F2B"]
 
-                    filtered_topics = [t for topics in filtered["Topics"] for t in topics]
-                    filtered_topic_counts = Counter(filtered_topics)
-                    filtered_countries = [c for countries in filtered["Countries"] for c in countries]
-                    filtered_country_counts = Counter(filtered_countries)
+            stop_w = {"the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","it","this","that","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","not","no","its","as","if","than","so","up","out","about","into","over","after","under","between","through","during","before","more","most","other","some","also","all","each","both","few","many","much","any","which","what","who","when","where","why","their","them","they","he","she","we","you","his","her","our","your","s","new","one","two","us","my","me","these","those","china","chinese","has","been","can","may","its","such","only","said","according","year","years","per","cent","million","billion","first"}
 
-                    st.caption(f"**{len(filtered)}** healthcare articles out of {len(df_ch)} total")
-                    st.markdown("---")
+            # ════════════════════════════════════════
+            # TABS
+            # ════════════════════════════════════════
+            tab_dash, tab_flows, tab_hospitals, tab_notes, tab_links = st.tabs([
+                "📊 Dashboard",
+                "🌊 Patient Flows",
+                "🏥 Hospitals & Regions",
+                "📝 Notes & Research",
+                "🔗 Links & Resources",
+            ])
 
-                    # KPIs
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1:
-                        kpi_card("Health Articles", str(len(filtered)))
-                    with c2:
-                        this_month = len(filtered[filtered["Date"] >= pd.Timestamp.now() - pd.Timedelta(days=30)])
-                        kpi_card("This Month", str(this_month))
-                    with c3:
-                        kpi_card("Health Topics", str(len(set(filtered_topics))))
-                    with c4:
-                        kpi_card("Countries", str(len(set(filtered_countries))))
+            # ═══════════════════════════════════════
+            # TAB 1: DASHBOARD
+            # ═══════════════════════════════════════
+            with tab_dash:
+                section_header("🔍 Filters")
+                fc1, fc2, fc3 = st.columns([2, 2, 2])
+                with fc1:
+                    sel_topics = st.multiselect("📌 Topic", sorted(set(all_topics)), default=[], key="cn_tp")
+                with fc2:
+                    vd = df_cn["Date"].dropna()
+                    dr = st.date_input("📅 Date range", value=(vd.min().date(), vd.max().date()), min_value=vd.min().date(), max_value=vd.max().date(), key="cn_dr") if not vd.empty else None
+                with fc3:
+                    kw_search = st.text_input("🔎 Keyword", placeholder="e.g. stem cell, Alzheimer...", key="cn_kw")
 
-                    st.markdown("<br>", unsafe_allow_html=True)
+                filtered = df_cn.copy()
+                if sel_topics:
+                    filtered = filtered[filtered["Topics"].apply(lambda t: any(x in sel_topics for x in t))]
+                if dr and len(dr) == 2:
+                    filtered = filtered[(filtered["Date"] >= pd.Timestamp(dr[0])) & (filtered["Date"] <= pd.Timestamp(dr[1]))]
+                if kw_search.strip():
+                    filtered = filtered[filtered["Full_Text"].str.contains(kw_search.strip().lower(), na=False)]
 
-                    # TREEMAP + SUNBURST
-                    section_header("🗺️ Healthcare Topic Distribution")
-                    col_tree, col_sun = st.columns(2)
-                    with col_tree:
-                        st.markdown("##### 🌳 Topic Treemap")
-                        if filtered_topic_counts:
-                            tc_df = pd.DataFrame(filtered_topic_counts.most_common(20), columns=["Topic", "Count"])
-                            fig_tree = px.treemap(tc_df, path=["Topic"], values="Count", color="Count",
-                                                   color_continuous_scale=["#0D7C66", "#1E3A5F", "#E85D04", "#7B2D8E"])
-                            fig_tree.update_traces(textinfo="label+value", textfont_size=13, marker=dict(cornerradius=5))
-                            style_plotly(fig_tree, height=420)
-                            fig_tree.update_layout(margin=dict(t=10, l=10, r=10, b=10), coloraxis_showscale=False)
-                            st.plotly_chart(fig_tree, use_container_width=True)
+                f_topics = [t for ts in filtered["Topics"] for t in ts]
+                f_origins = [o for os in filtered["Origins"] for o in os]
+                f_hospitals = [h for hs in filtered["Hospitals"] for h in hs]
+                f_regions = [r for rs in filtered["Regions"] for r in rs]
 
-                    with col_sun:
-                        st.markdown("##### ☀️ Sunburst – Source / Topic")
-                        sun_rows = []
-                        for _, row in filtered.iterrows():
+                st.caption(f"**{len(filtered)}** articles after filters")
+                st.markdown("---")
+
+                # KPIs
+                k1, k2, k3, k4, k5 = st.columns(5)
+                with k1: kpi_card("Articles", str(len(filtered)))
+                with k2: kpi_card("Topics", str(len(set(f_topics))))
+                with k3: kpi_card("Origin Countries", str(len(set(f_origins))))
+                with k4: kpi_card("Hospitals", str(len(set(f_hospitals))))
+                with k5: kpi_card("CN Regions", str(len(set(f_regions))))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # TREEMAP + SUNBURST
+                section_header("🗺️ Topic Distribution")
+                ct, cs = st.columns(2)
+                with ct:
+                    st.markdown("##### 🌳 Topic Treemap")
+                    tc = Counter(f_topics)
+                    if tc:
+                        tc_df = pd.DataFrame(tc.most_common(15), columns=["Topic", "Count"])
+                        fig = px.treemap(tc_df, path=["Topic"], values="Count", color="Count",
+                                          color_continuous_scale=["#C73E1D", "#D4A017", "#0D7C66"])
+                        fig.update_traces(textinfo="label+value", textfont_size=12)
+                        style_plotly(fig, height=400); fig.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                with cs:
+                    st.markdown("##### ☀️ Origin Region / Topic")
+                    sun_rows = []
+                    for _, row in filtered.iterrows():
+                        for org in (row["OriginRegions"] or ["Unknown"]):
                             for t in row["Topics"]:
-                                sun_rows.append({"Source": row["Source"], "Topic": t})
-                        if sun_rows:
-                            sun_df = pd.DataFrame(sun_rows)
-                            sun_agg = sun_df.groupby(["Source", "Topic"]).size().reset_index(name="Count")
-                            fig_sun = px.sunburst(sun_agg, path=["Source", "Topic"], values="Count", color="Count",
-                                                   color_continuous_scale=["#2E86AB", "#E85D04", "#7B2D8E"])
-                            style_plotly(fig_sun, height=420)
-                            fig_sun.update_layout(margin=dict(t=10, l=10, r=10, b=10), coloraxis_showscale=False)
-                            st.plotly_chart(fig_sun, use_container_width=True)
+                                sun_rows.append({"Origin": org, "Topic": t})
+                    if sun_rows:
+                        sun_df = pd.DataFrame(sun_rows)
+                        sun_agg = sun_df.groupby(["Origin", "Topic"]).size().reset_index(name="Count")
+                        fig_s = px.sunburst(sun_agg, path=["Origin", "Topic"], values="Count", color="Count",
+                                             color_continuous_scale=["#2E86AB", "#E85D04", "#C73E1D"])
+                        style_plotly(fig_s, height=400); fig_s.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig_s, use_container_width=True)
 
-                    st.markdown("---")
+                st.markdown("---")
 
-                    # COUNTRY MAP
-                    section_header("🌍 Country Mentions Map")
-                    if filtered_country_counts:
-                        map_data = []
-                        for country, count in filtered_country_counts.most_common(30):
-                            if country in COUNTRY_COORDS:
-                                lat, lon = COUNTRY_COORDS[country]
-                                map_data.append({"Country": country, "Mentions": count, "lat": lat, "lon": lon})
-                        if map_data:
-                            map_df = pd.DataFrame(map_data)
-                            fig_map = px.scatter_geo(
-                                map_df, lat="lat", lon="lon", size="Mentions",
-                                hover_name="Country", color="Mentions",
-                                color_continuous_scale=["#2E86AB", "#E85D04", "#C73E1D"],
-                                size_max=30, projection="natural earth",
-                            )
-                            fig_map.update_geos(
-                                showcoastlines=True, coastlinecolor="#ccc",
-                                showland=True, landcolor="#F5F5F5",
-                                showocean=True, oceancolor="#EBF5FB",
-                                showlakes=False, showcountries=True, countrycolor="#ddd",
-                            )
-                            style_plotly(fig_map, height=450)
-                            fig_map.update_layout(margin=dict(t=10, l=0, r=0, b=10), coloraxis_showscale=False)
-                            st.plotly_chart(fig_map, use_container_width=True)
+                # TIMELINE
+                section_header("⏱️ Timeline")
+                tl = filtered.dropna(subset=["Date"]).copy()
+                if not tl.empty:
+                    tl["TC"] = tl["Topics"].apply(len).clip(lower=1)
+                    fig_tl = px.scatter(tl, x="Date", y="PrimaryTopic", size="TC", color="PrimaryTopic",
+                                         hover_name="Title", color_discrete_sequence=palette, size_max=16, opacity=0.8)
+                    style_plotly(fig_tl, height=380); fig_tl.update_layout(showlegend=False, margin=dict(l=10,r=10,t=10,b=40))
+                    st.plotly_chart(fig_tl, use_container_width=True)
 
-                        # Top countries bar
-                        cc_df = pd.DataFrame(filtered_country_counts.most_common(15), columns=["Country", "Mentions"])
-                        fig_cc = px.bar(cc_df, x="Mentions", y="Country", orientation="h", color="Mentions",
-                                        color_continuous_scale=["#2E86AB", "#0D7C66", "#E85D04"])
-                        style_plotly(fig_cc, height=350)
-                        fig_cc.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
-                        st.plotly_chart(fig_cc, use_container_width=True)
-                    else:
-                        st.info("No country mentions detected.")
+                st.markdown("---")
 
-                    st.markdown("---")
+                # WORD CLOUD + FREQUENCY
+                section_header("💬 Text Analysis")
+                corpus = " ".join(filtered["Title"].dropna().tolist() + filtered["Summary"].dropna().tolist()).lower()
+                words = [w for w in re_cn.findall(r"[a-z]{3,}", corpus) if w not in stop_w]
+                wf = Counter(words); tw = wf.most_common(25)
 
-                    # NETWORK GRAPH: COUNTRY × TOPIC
-                    section_header("🕸️ Network Graph – Countries × Topics")
-                    if filtered_countries and filtered_topics:
-                        import json as _json
+                wc1, wc2 = st.columns(2)
+                with wc1:
+                    st.markdown("##### ☁️ Word Cloud")
+                    if tw:
+                        try:
+                            from wordcloud import WordCloud; import matplotlib.pyplot as plt
+                            wc = WordCloud(width=800, height=400, background_color="white", colormap="YlOrRd", max_words=60, contour_color="#C73E1D").generate_from_frequencies(dict(tw))
+                            fig_wc, ax = plt.subplots(figsize=(10,5)); ax.imshow(wc, interpolation="bilinear"); ax.axis("off")
+                            st.pyplot(fig_wc, use_container_width=True); plt.close(fig_wc)
+                        except ImportError:
+                            tw_df = pd.DataFrame(tw[:15], columns=["Word","Count"])
+                            fig_fb = px.bar(tw_df, x="Count", y="Word", orientation="h", color="Count", color_continuous_scale=["#C73E1D","#D4A017"])
+                            style_plotly(fig_fb, height=350); fig_fb.update_layout(showlegend=False, coloraxis_showscale=False)
+                            st.plotly_chart(fig_fb, use_container_width=True)
+                with wc2:
+                    st.markdown("##### 📊 Top 20 Words")
+                    if tw:
+                        tw_df = pd.DataFrame(tw[:20], columns=["Word","Freq"])
+                        fig_f = px.bar(tw_df, x="Freq", y="Word", orientation="h", color="Freq", text="Freq", color_continuous_scale=["#2E86AB","#C73E1D"])
+                        fig_f.update_traces(textposition="outside"); style_plotly(fig_f, height=450)
+                        fig_f.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(fig_f, use_container_width=True)
 
-                        # Build edges: country ↔ topic co-occurrences
-                        edges = Counter()
-                        for _, row in filtered.iterrows():
-                            for c in row["Countries"]:
-                                for t in row["Topics"]:
-                                    edges[(c, t)] += 1
+                st.markdown("---")
 
-                        top_edges = edges.most_common(50)
-                        if top_edges:
-                            nodes_set = set()
-                            for (c, t), _ in top_edges:
-                                nodes_set.add(("country", c))
-                                nodes_set.add(("topic", t))
+                # KEYWORD TREND
+                section_header("📈 Keyword Trends Over Time")
+                top_kw = [w for w, _ in tw[:8]]
+                tl_kw = filtered.dropna(subset=["Date"]).copy()
+                if not tl_kw.empty and top_kw:
+                    tl_kw["YM"] = tl_kw["Date"].dt.to_period("M").astype(str)
+                    kw_rows = []
+                    for _, row in tl_kw.iterrows():
+                        for kw in top_kw:
+                            if kw in row["Full_Text"]:
+                                kw_rows.append({"Month": row["YM"], "Keyword": kw})
+                    if kw_rows:
+                        kw_agg = pd.DataFrame(kw_rows).groupby(["Month","Keyword"]).size().reset_index(name="Mentions")
+                        fig_kt = px.line(kw_agg, x="Month", y="Mentions", color="Keyword", markers=True, color_discrete_sequence=palette)
+                        style_plotly(fig_kt, height=350)
+                        fig_kt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)))
+                        st.plotly_chart(fig_kt, use_container_width=True)
 
-                            node_list = list(nodes_set)
-                            node_idx = {n: i for i, n in enumerate(node_list)}
+                st.markdown("---")
 
-                            # Build Plotly network
-                            import math
+                # HEATMAP
+                section_header("🔥 Seasonality Heatmap")
+                heat = filtered.dropna(subset=["Date"]).copy()
+                if not heat.empty:
+                    heat_rows = []
+                    for _, row in heat.iterrows():
+                        for t in row["Topics"]:
+                            heat_rows.append({"Month": row["Date"].strftime("%b"), "MonthNum": row["Date"].month, "Topic": t})
+                    if heat_rows:
+                        hdf = pd.DataFrame(heat_rows)
+                        hp = hdf.pivot_table(index="Topic", columns="Month", values="MonthNum", aggfunc="count", fill_value=0)
+                        mo = [m for m in ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] if m in hp.columns]
+                        hp = hp[mo]
+                        top_tp = [t for t, _ in Counter(f_topics).most_common(12)]
+                        hp = hp[hp.index.isin(top_tp)]
+                        if not hp.empty:
+                            fig_hm = px.imshow(hp.values, x=hp.columns.tolist(), y=hp.index.tolist(), color_continuous_scale=["#F0F4F8","#2E86AB","#C73E1D"], aspect="auto", text_auto=True)
+                            style_plotly(fig_hm, height=max(280, len(hp)*35+60)); fig_hm.update_layout(coloraxis_showscale=False)
+                            st.plotly_chart(fig_hm, use_container_width=True)
 
-                            n = len(node_list)
-                            positions = {}
-                            countries_nodes = [nd for nd in node_list if nd[0] == "country"]
-                            topics_nodes = [nd for nd in node_list if nd[0] == "topic"]
+                st.markdown("---")
 
-                            for i, nd in enumerate(countries_nodes):
-                                angle = 2 * math.pi * i / max(len(countries_nodes), 1)
-                                positions[nd] = (math.cos(angle) * 2, math.sin(angle) * 2)
-                            for i, nd in enumerate(topics_nodes):
-                                angle = 2 * math.pi * i / max(len(topics_nodes), 1)
-                                positions[nd] = (math.cos(angle) * 1, math.sin(angle) * 1)
-
-                            edge_x, edge_y = [], []
-                            for (c, t), w in top_edges:
-                                x0, y0 = positions[("country", c)]
-                                x1, y1 = positions[("topic", t)]
-                                edge_x += [x0, x1, None]
-                                edge_y += [y0, y1, None]
-
-                            import plotly.graph_objects as go
-
-                            fig_net = go.Figure()
-
-                            # Edges
-                            max_w = max(w for _, w in top_edges)
-                            fig_net.add_trace(go.Scatter(
-                                x=edge_x, y=edge_y, mode="lines",
-                                line=dict(width=0.8, color="rgba(150,150,150,0.4)"),
-                                hoverinfo="none",
-                            ))
-
-                            # Country nodes
-                            cx = [positions[("country", c)][0] for c in [nd[1] for nd in countries_nodes]]
-                            cy = [positions[("country", c)][1] for c in [nd[1] for nd in countries_nodes]]
-                            c_names = [nd[1] for nd in countries_nodes]
-                            c_sizes = [filtered_country_counts.get(c, 1) for c in c_names]
-                            max_cs = max(c_sizes) if c_sizes else 1
-                            c_sizes_norm = [max(8, (s / max_cs) * 25) for s in c_sizes]
-
-                            fig_net.add_trace(go.Scatter(
-                                x=cx, y=cy, mode="markers+text",
-                                marker=dict(size=c_sizes_norm, color="#E85D04", line=dict(width=1, color="white")),
-                                text=c_names, textposition="top center", textfont=dict(size=9, color="#1E3A5F"),
-                                hovertext=[f"{c}: {filtered_country_counts.get(c, 0)} mentions" for c in c_names],
-                                hoverinfo="text", name="Countries",
-                            ))
-
-                            # Topic nodes
-                            tx = [positions[("topic", t)][0] for t in [nd[1] for nd in topics_nodes]]
-                            ty = [positions[("topic", t)][1] for t in [nd[1] for nd in topics_nodes]]
-                            t_names = [nd[1] for nd in topics_nodes]
-                            t_sizes = [filtered_topic_counts.get(t, 1) for t in t_names]
-                            max_ts = max(t_sizes) if t_sizes else 1
-                            t_sizes_norm = [max(8, (s / max_ts) * 25) for s in t_sizes]
-
-                            fig_net.add_trace(go.Scatter(
-                                x=tx, y=ty, mode="markers+text",
-                                marker=dict(size=t_sizes_norm, color="#0D7C66", symbol="diamond",
-                                            line=dict(width=1, color="white")),
-                                text=t_names, textposition="bottom center", textfont=dict(size=8, color="#0D7C66"),
-                                hovertext=[f"{t}: {filtered_topic_counts.get(t, 0)} articles" for t in t_names],
-                                hoverinfo="text", name="Topics",
-                            ))
-
-                            style_plotly(fig_net, height=550)
-                            fig_net.update_layout(
-                                showlegend=True,
-                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                                margin=dict(l=10, r=10, t=10, b=10),
-                            )
-                            st.plotly_chart(fig_net, use_container_width=True)
-                        else:
-                            st.info("Insufficient co-occurrences for network graph.")
-                    else:
-                        st.info("No country/topic data for network graph.")
-
-                    st.markdown("---")
-
-                    # SCATTER TIMELINE
-                    section_header("⏱️ Healthcare Timeline")
-                    tl = filtered.dropna(subset=["Date"]).copy()
-                    if not tl.empty:
-                        tl["TopicCount"] = tl["Topics"].apply(len).clip(lower=1)
-                        fig_scatter = px.scatter(
-                            tl, x="Date", y="PrimaryTopic", size="TopicCount", color="PrimaryTopic",
-                            hover_name="Title", color_discrete_sequence=palette, size_max=18, opacity=0.8)
-                        style_plotly(fig_scatter, height=400)
-                        fig_scatter.update_layout(xaxis_title="", yaxis_title="", showlegend=False, margin=dict(l=10, r=10, t=10, b=40))
-                        fig_scatter.update_xaxes(dtick="M1", tickformat="%b %Y")
-                        st.plotly_chart(fig_scatter, use_container_width=True)
-
-                    st.markdown("---")
-
-                    # WORD CLOUD + FREQUENCY
-                    section_header("💬 Text Analysis")
-                    corpus = " ".join(filtered["Title"].dropna().tolist() + filtered["Summary"].dropna().tolist()).lower()
-                    stop_words = {
-                        "the","a","an","and","or","but","in","on","at","to","for","of","with","by","from",
-                        "is","it","this","that","are","was","were","be","been","being","have","has","had",
-                        "do","does","did","will","would","could","should","may","might","shall","can","need",
-                        "not","no","its","as","if","than","then","so","up","out","about","into","over","after",
-                        "under","between","through","during","before","above","below","more","most","other",
-                        "some","such","only","own","same","also","how","all","each","every","both","few",
-                        "many","much","any","which","what","who","whom","when","where","why","their","them",
-                        "they","he","she","we","you","his","her","our","your","s","new","one","two","us",
-                        "my","me","these","those","chatham","house","international","affairs","think","tank",
-                    }
-                    words = re_ch.findall(r"[a-z]{3,}", corpus)
-                    words = [w for w in words if w not in stop_words]
-                    word_freq = Counter(words)
-                    top_words = word_freq.most_common(30)
-
-                    wc_col, freq_col = st.columns(2)
-                    with wc_col:
-                        st.markdown("##### ☁️ Word Cloud")
-                        if top_words:
-                            try:
-                                from wordcloud import WordCloud
-                                import matplotlib.pyplot as plt
-                                wc = WordCloud(width=800, height=400, background_color="white", colormap="viridis",
-                                               max_words=80, prefer_horizontal=0.7, contour_width=1, contour_color="#0D7C66"
-                                ).generate_from_frequencies(dict(top_words))
-                                fig_wc, ax_wc = plt.subplots(figsize=(10, 5))
-                                ax_wc.imshow(wc, interpolation="bilinear"); ax_wc.axis("off")
-                                st.pyplot(fig_wc, use_container_width=True); plt.close(fig_wc)
-                            except ImportError:
-                                tw_df = pd.DataFrame(top_words[:15], columns=["Word", "Count"])
-                                fig_fb = px.bar(tw_df, x="Count", y="Word", orientation="h", color="Count",
-                                                color_continuous_scale=["#0D7C66", "#E85D04"])
-                                style_plotly(fig_fb, height=350)
-                                fig_fb.update_layout(showlegend=False, coloraxis_showscale=False)
-                                st.plotly_chart(fig_fb, use_container_width=True)
-
-                    with freq_col:
-                        st.markdown("##### 📊 Top 20 Words")
-                        if top_words:
-                            tw_df = pd.DataFrame(top_words[:20], columns=["Word", "Frequency"])
-                            fig_freq = px.bar(tw_df, x="Frequency", y="Word", orientation="h", color="Frequency",
-                                              color_continuous_scale=["#2E86AB", "#0D7C66", "#E85D04"], text="Frequency")
-                            fig_freq.update_traces(textposition="outside", textfont_size=11)
-                            style_plotly(fig_freq, height=480)
-                            fig_freq.update_layout(yaxis=dict(autorange="reversed"), showlegend=False,
-                                                    coloraxis_showscale=False, margin=dict(l=10, r=60, t=10, b=10))
-                            st.plotly_chart(fig_freq, use_container_width=True)
-
-                    st.markdown("---")
-
-                    # KEYWORD TREND
-                    section_header("📈 Health Keyword Trends")
-                    top_kw = [w for w, _ in top_words[:8]]
-                    tl_kw = filtered.dropna(subset=["Date"]).copy()
-                    if not tl_kw.empty and top_kw:
-                        tl_kw["YM"] = tl_kw["Date"].dt.to_period("M").astype(str)
-                        kw_rows = []
-                        for _, row in tl_kw.iterrows():
-                            txt = row["Full_Text"]
-                            for kw in top_kw:
-                                if kw in txt:
-                                    kw_rows.append({"Month": row["YM"], "Keyword": kw})
-                        if kw_rows:
-                            kw_df = pd.DataFrame(kw_rows)
-                            kw_agg = kw_df.groupby(["Month", "Keyword"]).size().reset_index(name="Mentions")
-                            fig_trend = px.line(kw_agg, x="Month", y="Mentions", color="Keyword",
-                                                markers=True, color_discrete_sequence=palette)
-                            style_plotly(fig_trend, height=380)
-                            fig_trend.update_layout(xaxis_title="Month", yaxis_title="Mentions",
-                                                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
-                            st.plotly_chart(fig_trend, use_container_width=True)
-
-                    st.markdown("---")
-
-                    # HEATMAP
-                    section_header("🔥 Seasonality Heatmap")
-                    heat = filtered.dropna(subset=["Date"]).copy()
-                    if not heat.empty:
-                        heat_rows = []
-                        for _, row in heat.iterrows():
-                            for t in row["Topics"]:
-                                heat_rows.append({"Month": row["Date"].strftime("%b"), "MonthNum": row["Date"].month, "Topic": t})
-                        if heat_rows:
-                            heat_df = pd.DataFrame(heat_rows)
-                            heat_pivot = heat_df.pivot_table(index="Topic", columns="Month", values="MonthNum", aggfunc="count", fill_value=0)
-                            month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-                            ordered = [m for m in month_order if m in heat_pivot.columns]
-                            heat_pivot = heat_pivot[ordered]
-                            top_tp = [t for t, _ in filtered_topic_counts.most_common(15)]
-                            heat_pivot = heat_pivot[heat_pivot.index.isin(top_tp)]
-                            if not heat_pivot.empty:
-                                fig_heat = px.imshow(heat_pivot.values, x=heat_pivot.columns.tolist(), y=heat_pivot.index.tolist(),
-                                                     color_continuous_scale=["#F0F4F8", "#2E86AB", "#0D7C66", "#E85D04"],
-                                                     aspect="auto", text_auto=True)
-                                style_plotly(fig_heat, height=max(300, len(heat_pivot) * 35 + 80))
-                                fig_heat.update_layout(xaxis_title="Month", yaxis_title="", coloraxis_showscale=False)
-                                st.plotly_chart(fig_heat, use_container_width=True)
-
-                    st.markdown("---")
-
-                    # ARTICLES
-                    section_header("📰 Healthcare Articles")
-                    sort_opt = st.selectbox("Sort by", ["Most recent", "Alphabetical"], index=0)
-                    display = filtered.sort_values("Date", ascending=False) if sort_opt == "Most recent" else filtered.sort_values("Title")
-                    PAGE_SIZE = 12
-                    total_pages = max(1, -(-len(display) // PAGE_SIZE))
-                    page_num = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-                    start_idx = (page_num - 1) * PAGE_SIZE
-                    page_slice = display.iloc[start_idx : start_idx + PAGE_SIZE]
-
-                    for _, row in page_slice.iterrows():
-                        topics_html = " ".join(
-                            f'<span style="background:#EBF5FB; color:#1A6B8A; padding:2px 8px; '
-                            f'border-radius:12px; font-size:0.72rem; margin-right:3px;">{t}</span>'
-                            for t in row["Topics"][:5])
-                        countries_html = " ".join(
-                            f'<span style="background:#FFF3E0; color:#E85D04; padding:2px 8px; '
-                            f'border-radius:12px; font-size:0.72rem; margin-right:3px;">🌍 {c}</span>'
-                            for c in row["Countries"][:3])
-                        date_str = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
-                        summary_text = row["Summary"].replace("Chatham House", "").strip()
-
-                        st.markdown(f"""
-                        <div style="background:#FFFFFF; border-left:4px solid #0D7C66;
-                                    padding:1rem 1.2rem; margin:0.4rem 0; border-radius:0 6px 6px 0;
-                                    box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <a href="{row['URL']}" target="_blank"
-                                   style="color:#0D2B45; font-weight:600; font-size:0.95rem; text-decoration:none;">
-                                    {row['Title'][:120]}
-                                </a>
-                                <span style="color:#95A5A6; font-size:0.75rem; white-space:nowrap; margin-left:1rem;">{date_str}</span>
-                            </div>
-                            <div style="margin:0.3rem 0;">{topics_html} {countries_html}</div>
-                            <div style="color:#7F8C8D; font-size:0.85rem; line-height:1.5; margin-top:0.3rem;">
-                                {summary_text[:200]}{'...' if len(summary_text) > 200 else ''}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                    st.caption(f"Page {page_num} of {total_pages} — {len(display)} healthcare articles")
-                    with st.expander("📋 Full Table"):
-                        st.dataframe(filtered[["Date", "Title", "PrimaryTopic", "Source"]].sort_values("Date", ascending=False),
-                                     use_container_width=True, hide_index=True)
-
-                # ════════════════════════════════════════════════
-                # TAB 2: NOTES & AI ANALYSIS
-                # ════════════════════════════════════════════════
-                with tab_notes:
-                    section_header("📝 Personal Notes & AI Semantic Analysis")
-
-                    st.markdown("""
-                    <div style="background:#F0F8FF; border:1px solid #B8D4E3; padding:12px 16px; border-radius:8px; margin-bottom:16px;">
-                        <strong>How to use:</strong> Select an article below, add your personal notes, and click
-                        <em>Save & Analyze</em> to run AI keyword and country extraction on your notes.
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # Article selector
-                    article_titles = df_health["Title"].tolist()
-                    selected_article = st.selectbox("📄 Select article to annotate", options=article_titles, index=0)
-                    sel_row = df_health[df_health["Title"] == selected_article].iloc[0]
-
+                # ARTICLES
+                section_header("📰 Articles")
+                sort_o = st.selectbox("Sort", ["Most recent", "Alphabetical"], index=0, key="cn_sort")
+                display = filtered.sort_values("Date", ascending=False) if sort_o == "Most recent" else filtered.sort_values("Title")
+                PS = 12; tp = max(1, -(-len(display)//PS)); pn = st.number_input("Page", 1, tp, 1, key="cn_page")
+                sl = display.iloc[(pn-1)*PS : pn*PS]
+                for _, row in sl.iterrows():
+                    t_html = " ".join(f'<span style="background:#FFF3E0;color:#C73E1D;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{t}</span>' for t in row["Topics"][:4])
+                    o_html = " ".join(f'<span style="background:#E3F2FD;color:#1565C0;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">✈️ {o}</span>' for o in row["Origins"][:3])
+                    h_html = " ".join(f'<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">🏥 {h}</span>' for h in row["Hospitals"][:2])
+                    ds = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
                     st.markdown(f"""
-                    <div style="background:#FAFAFA; padding:10px 14px; border-radius:6px; border:1px solid #eee; margin:8px 0;">
-                        <strong>{sel_row['Title']}</strong><br>
-                        <span style="color:#666; font-size:0.85rem;">
-                            📅 {sel_row['Date'].strftime('%d %b %Y') if pd.notna(sel_row['Date']) else 'N/A'} |
-                            🏷️ {', '.join(sel_row['Topics'][:3])} |
-                            🌍 {', '.join(sel_row['Countries'][:3]) if sel_row['Countries'] else 'N/A'}
-                        </span>
+                    <div style="background:#FFF;border-left:4px solid #C73E1D;padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <a href="{row['URL']}" target="_blank" style="color:#0D2B45;font-weight:600;font-size:0.95rem;text-decoration:none;">{row['Title'][:120]}</a>
+                            <span style="color:#95A5A6;font-size:0.75rem;white-space:nowrap;margin-left:1rem;">{ds}</span>
+                        </div>
+                        <div style="margin:0.3rem 0;">{t_html} {o_html} {h_html}</div>
+                        <div style="color:#7F8C8D;font-size:0.85rem;line-height:1.5;margin-top:0.3rem;">{row['Summary'][:200]}{'...' if len(row['Summary'])>200 else ''}</div>
                     </div>
                     """, unsafe_allow_html=True)
+                st.caption(f"Page {pn} of {tp} — {len(display)} articles")
 
-                    # Load existing note
-                    doc_id = int(sel_row["DocID"])
-                    existing_note = session.execute(
-                        sa_text("SELECT note_text, private_url, ai_keywords, ai_countries FROM chatham_notes WHERE document_id = :did ORDER BY updated_at DESC LIMIT 1"),
-                        {"did": doc_id}
-                    ).fetchone()
+            # ═══════════════════════════════════════
+            # TAB 2: PATIENT FLOWS
+            # ═══════════════════════════════════════
+            with tab_flows:
+                section_header("🌊 International Patient Flow Analysis")
 
-                    default_note = existing_note[0] if existing_note else ""
-                    default_url = existing_note[1] if existing_note else ""
-                    default_kw = existing_note[2] if existing_note else ""
-                    default_countries = existing_note[3] if existing_note else ""
+                st.markdown("""
+                <div style="background:#FFF3E0;border:1px solid #FFE0B2;padding:12px 16px;border-radius:8px;margin-bottom:16px;">
+                    <strong>Patient flow intelligence</strong> — Extracted from article mentions of origin countries, destination regions and hospitals in China.
+                    Based on <strong>{}</strong> articles mentioning {} origin countries.
+                </div>
+                """.format(len(df_cn[df_cn["Origins"].apply(len) > 0]), len(set(all_origins))), unsafe_allow_html=True)
 
-                    ncol1, ncol2 = st.columns([3, 1])
-                    with ncol1:
-                        note_text = st.text_area("✏️ Your notes", value=default_note, height=200,
-                                                  placeholder="Write your analysis, observations, key takeaways...")
-                        private_url = st.text_input("🔗 Private Chatham House link", value=default_url,
-                                                     placeholder="https://www.chathamhouse.org/members/...")
+                # ── SANKEY DIAGRAM: Origin Region → China Region → Hospital ──
+                section_header("🔀 Sankey Flow: Origin → China Region → Treatment Area")
 
-                    with ncol2:
-                        st.markdown("##### 🤖 AI Extracted")
-                        if default_kw:
-                            st.markdown(f"**Keywords:** {default_kw}")
-                        if default_countries:
-                            st.markdown(f"**Countries:** {default_countries}")
-                        if not default_kw and not default_countries:
-                            st.caption("Save & Analyze to extract keywords and countries from your notes.")
+                # Build sankey data
+                sankey_edges_1 = Counter()  # origin_region → china_region
+                sankey_edges_2 = Counter()  # china_region → topic
 
-                    if st.button("💾 Save & Analyze", type="primary"):
-                        # AI-like semantic extraction from notes
-                        combined_text = (note_text + " " + sel_row["Title"] + " " + sel_row["Summary"]).lower()
+                for _, row in df_cn.iterrows():
+                    for org in row["OriginRegions"]:
+                        for creg in (row["Regions"] or ["China (general)"]):
+                            sankey_edges_1[(org, creg)] += 1
+                        for tp in row["Topics"][:2]:
+                            for creg in (row["Regions"] or ["China (general)"]):
+                                sankey_edges_2[(creg, tp)] += 1
 
-                        # Extract keywords (top meaningful words from note)
-                        note_words = re_ch.findall(r"[a-z]{3,}", combined_text)
-                        note_words = [w for w in note_words if w not in stop_words and len(w) > 3]
-                        ai_kw = ", ".join([w for w, _ in Counter(note_words).most_common(10)])
+                if sankey_edges_1:
+                    # Build node list
+                    all_nodes = []
+                    node_colors = []
 
-                        # Extract countries from notes
-                        ai_countries_list = extract_countries(combined_text)
-                        ai_countries = ", ".join(ai_countries_list) if ai_countries_list else ""
+                    # Level 0: Origin regions
+                    origin_set = sorted(set(k[0] for k in sankey_edges_1))
+                    for n in origin_set:
+                        all_nodes.append(n)
+                        node_colors.append("#2E86AB")
 
-                        # Upsert note
-                        if existing_note:
-                            session.execute(sa_text("""
-                                UPDATE chatham_notes SET note_text = :note, private_url = :url,
-                                ai_keywords = :kw, ai_countries = :cc, updated_at = NOW()
-                                WHERE document_id = :did
-                            """), {"note": note_text, "url": private_url, "kw": ai_kw, "cc": ai_countries, "did": doc_id})
-                        else:
-                            session.execute(sa_text("""
-                                INSERT INTO chatham_notes (document_id, note_text, private_url, ai_keywords, ai_countries)
-                                VALUES (:did, :note, :url, :kw, :cc)
-                            """), {"did": doc_id, "note": note_text, "url": private_url, "kw": ai_kw, "cc": ai_countries})
-                        session.commit()
-                        st.success(f"✅ Saved! AI extracted **{len(ai_kw.split(', '))}** keywords and **{len(ai_countries_list)}** countries.")
-                        st.rerun()
+                    # Level 1: China regions
+                    china_set = sorted(set(k[1] for k in sankey_edges_1) | set(k[0] for k in sankey_edges_2))
+                    for n in china_set:
+                        all_nodes.append(n)
+                        node_colors.append("#C73E1D")
 
-                    # Show all notes
-                    st.markdown("---")
-                    section_header("📋 All Notes")
-                    all_notes = session.execute(sa_text("""
-                        SELECT cn.document_id, cn.note_text, cn.private_url, cn.ai_keywords, cn.ai_countries, cn.updated_at, d.title
-                        FROM chatham_notes cn
-                        JOIN documents d ON cn.document_id = d.document_id
-                        ORDER BY cn.updated_at DESC
-                    """)).fetchall()
+                    # Level 2: Topics
+                    topic_set = sorted(set(k[1] for k in sankey_edges_2))
+                    for n in topic_set:
+                        all_nodes.append(n)
+                        node_colors.append("#0D7C66")
 
-                    if all_notes:
-                        for n in all_notes:
-                            with st.expander(f"📄 {n[6][:80]} — {n[5].strftime('%d %b %Y') if n[5] else ''}"):
-                                st.markdown(f"**Notes:** {n[1]}")
-                                if n[2]:
-                                    st.markdown(f"**Private link:** [{n[2][:60]}...]({n[2]})")
-                                if n[3]:
-                                    kw_html = " ".join(f'<span style="background:#E8F5E9; color:#2E7D32; padding:2px 6px; border-radius:10px; font-size:0.75rem;">{k.strip()}</span>' for k in n[3].split(","))
-                                    st.markdown(f"**AI Keywords:** {kw_html}", unsafe_allow_html=True)
-                                if n[4]:
-                                    st.markdown(f"**AI Countries:** 🌍 {n[4]}")
+                    node_idx = {n: i for i, n in enumerate(all_nodes)}
+
+                    sources, targets, values = [], [], []
+                    link_colors = []
+
+                    for (org, creg), v in sankey_edges_1.most_common(40):
+                        if org in node_idx and creg in node_idx:
+                            sources.append(node_idx[org])
+                            targets.append(node_idx[creg])
+                            values.append(v)
+                            link_colors.append("rgba(46,134,171,0.3)")
+
+                    for (creg, tp), v in sankey_edges_2.most_common(40):
+                        if creg in node_idx and tp in node_idx:
+                            sources.append(node_idx[creg])
+                            targets.append(node_idx[tp])
+                            values.append(v)
+                            link_colors.append("rgba(199,62,29,0.3)")
+
+                    fig_sankey = go.Figure(go.Sankey(
+                        node=dict(pad=15, thickness=20, line=dict(color="#333", width=0.5),
+                                  label=all_nodes, color=node_colors),
+                        link=dict(source=sources, target=targets, value=values, color=link_colors),
+                    ))
+                    style_plotly(fig_sankey, height=500)
+                    fig_sankey.update_layout(margin=dict(t=20, l=10, r=10, b=10))
+                    st.plotly_chart(fig_sankey, use_container_width=True)
+
+                    st.caption("🔵 Origin regions → 🔴 China destinations → 🟢 Treatment areas")
+                else:
+                    st.info("Insufficient data for Sankey flow diagram.")
+
+                st.markdown("---")
+
+                # ── ORIGIN COUNTRIES BAR + MAP ──
+                section_header("✈️ Top Origin Countries")
+                oc = Counter(all_origins)
+
+                oc1, oc2 = st.columns(2)
+                with oc1:
+                    st.markdown("##### 📊 Country Mentions")
+                    if oc:
+                        oc_df = pd.DataFrame(oc.most_common(20), columns=["Country", "Mentions"])
+                        fig_oc = px.bar(oc_df, x="Mentions", y="Country", orientation="h", color="Mentions",
+                                         color_continuous_scale=["#2E86AB", "#C73E1D"], text="Mentions")
+                        fig_oc.update_traces(textposition="outside")
+                        style_plotly(fig_oc, height=500)
+                        fig_oc.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(fig_oc, use_container_width=True)
+
+                with oc2:
+                    st.markdown("##### 🌍 Global Patient Origins")
+                    if oc:
+                        map_rows = []
+                        for country, count in oc.items():
+                            if country in ORIGIN_COORDS:
+                                lat, lon = ORIGIN_COORDS[country]
+                                map_rows.append({"Country": country, "Mentions": count, "lat": lat, "lon": lon})
+                        if map_rows:
+                            mdf = pd.DataFrame(map_rows)
+                            fig_gm = px.scatter_geo(mdf, lat="lat", lon="lon", size="Mentions", hover_name="Country",
+                                                     color="Mentions", color_continuous_scale=["#D4A017", "#C73E1D"],
+                                                     size_max=30, projection="natural earth")
+                            fig_gm.update_geos(showland=True, landcolor="#F5F0E8", showocean=True, oceancolor="#EBF5FB",
+                                                showcountries=True, countrycolor="#ddd")
+                            # Add lines from origin to Beijing (China center)
+                            for _, r in mdf.iterrows():
+                                fig_gm.add_trace(go.Scattergeo(
+                                    lon=[r["lon"], 116.4], lat=[r["lat"], 39.9],
+                                    mode="lines", line=dict(width=max(0.5, r["Mentions"]*0.3), color="rgba(199,62,29,0.25)"),
+                                    showlegend=False, hoverinfo="skip"))
+
+                            style_plotly(fig_gm, height=500)
+                            fig_gm.update_layout(margin=dict(t=10, l=0, r=0, b=10), coloraxis_showscale=False)
+                            st.plotly_chart(fig_gm, use_container_width=True)
+
+                st.markdown("---")
+
+                # ── ORIGIN REGION PIE ──
+                section_header("🥧 Patient Origins by World Region")
+                orc = Counter(all_origin_regions)
+                if orc:
+                    or_df = pd.DataFrame(orc.most_common(), columns=["Region", "Mentions"])
+                    fig_pie = px.pie(or_df, values="Mentions", names="Region", color_discrete_sequence=palette, hole=0.4)
+                    fig_pie.update_traces(textinfo="label+percent", textfont_size=12)
+                    style_plotly(fig_pie, height=400)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+                st.markdown("---")
+
+                # ── NETWORK: Origin Country ↔ China Region ──
+                section_header("🕸️ Network: Origin Countries × China Destinations")
+                edges_net = Counter()
+                for _, row in df_cn.iterrows():
+                    for org in row["Origins"]:
+                        for creg in (row["Regions"] or ["China"]):
+                            edges_net[(org, creg)] += 1
+
+                top_edges = edges_net.most_common(50)
+                if top_edges:
+                    nodes_set = set()
+                    for (a, b), _ in top_edges:
+                        nodes_set.add(("origin", a))
+                        nodes_set.add(("dest", b))
+
+                    node_list = list(nodes_set)
+                    origins_n = [n for n in node_list if n[0] == "origin"]
+                    dests_n = [n for n in node_list if n[0] == "dest"]
+                    positions = {}
+
+                    for i, nd in enumerate(origins_n):
+                        angle = 2 * math.pi * i / max(len(origins_n), 1)
+                        positions[nd] = (math.cos(angle) * 2.5, math.sin(angle) * 2.5)
+                    for i, nd in enumerate(dests_n):
+                        angle = 2 * math.pi * i / max(len(dests_n), 1)
+                        positions[nd] = (math.cos(angle) * 1, math.sin(angle) * 1)
+
+                    edge_x, edge_y = [], []
+                    for (a, b), w in top_edges:
+                        x0, y0 = positions[("origin", a)]
+                        x1, y1 = positions[("dest", b)]
+                        edge_x += [x0, x1, None]; edge_y += [y0, y1, None]
+
+                    fig_net = go.Figure()
+                    fig_net.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines",
+                        line=dict(width=0.7, color="rgba(150,150,150,0.4)"), hoverinfo="none"))
+
+                    # Origin nodes
+                    oc_counts = Counter(all_origins)
+                    ox = [positions[("origin", n[1])][0] for n in origins_n]
+                    oy = [positions[("origin", n[1])][1] for n in origins_n]
+                    o_names = [n[1] for n in origins_n]
+                    o_sizes = [max(8, min(25, oc_counts.get(n, 1) * 3)) for n in o_names]
+                    fig_net.add_trace(go.Scatter(x=ox, y=oy, mode="markers+text",
+                        marker=dict(size=o_sizes, color="#2E86AB", line=dict(width=1, color="white")),
+                        text=o_names, textposition="top center", textfont=dict(size=8), name="Origin Countries",
+                        hovertext=[f"{n}: {oc_counts.get(n,0)} mentions" for n in o_names], hoverinfo="text"))
+
+                    # Destination nodes
+                    rc = Counter(all_regions)
+                    dx = [positions[("dest", n[1])][0] for n in dests_n]
+                    dy = [positions[("dest", n[1])][1] for n in dests_n]
+                    d_names = [n[1] for n in dests_n]
+                    d_sizes = [max(10, min(30, rc.get(n, 1) * 4)) for n in d_names]
+                    fig_net.add_trace(go.Scatter(x=dx, y=dy, mode="markers+text",
+                        marker=dict(size=d_sizes, color="#C73E1D", symbol="diamond", line=dict(width=1, color="white")),
+                        text=d_names, textposition="bottom center", textfont=dict(size=9, color="#C73E1D"), name="China Destinations",
+                        hovertext=[f"{n}: {rc.get(n,0)} articles" for n in d_names], hoverinfo="text"))
+
+                    style_plotly(fig_net, height=500)
+                    fig_net.update_layout(showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                    st.plotly_chart(fig_net, use_container_width=True)
+
+                st.markdown("---")
+
+                # ── TREATMENT SPECIALTIES BY ORIGIN ──
+                section_header("🩺 What Treatments Do Different Regions Seek?")
+                treat_rows = []
+                for _, row in df_cn.iterrows():
+                    for org_r in row["OriginRegions"]:
+                        for tp in row["Topics"]:
+                            treat_rows.append({"Origin Region": org_r, "Treatment": tp})
+                if treat_rows:
+                    treat_df = pd.DataFrame(treat_rows)
+                    treat_pivot = treat_df.pivot_table(index="Treatment", columns="Origin Region", aggfunc="size", fill_value=0)
+                    if not treat_pivot.empty:
+                        fig_th = px.imshow(treat_pivot.values, x=treat_pivot.columns.tolist(), y=treat_pivot.index.tolist(),
+                                            color_continuous_scale=["#F5F0E8", "#D4A017", "#C73E1D"], aspect="auto", text_auto=True)
+                        style_plotly(fig_th, height=max(300, len(treat_pivot)*30+80))
+                        fig_th.update_layout(xaxis_title="Origin Region", yaxis_title="", coloraxis_showscale=False)
+                        st.plotly_chart(fig_th, use_container_width=True)
+
+            # ═══════════════════════════════════════
+            # TAB 3: HOSPITALS & REGIONS
+            # ═══════════════════════════════════════
+            with tab_hospitals:
+                section_header("🏥 Top Hospitals & Regions")
+                hc1, hc2 = st.columns(2)
+                with hc1:
+                    st.markdown("##### 🏥 Most Mentioned Hospitals")
+                    hc = Counter(all_hospitals)
+                    if hc:
+                        h_df = pd.DataFrame(hc.most_common(15), columns=["Hospital","Mentions"])
+                        fig_h = px.bar(h_df, x="Mentions", y="Hospital", orientation="h", color="Mentions", color_continuous_scale=["#C73E1D","#D4A017","#0D7C66"])
+                        style_plotly(fig_h, height=400); fig_h.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(fig_h, use_container_width=True)
+                with hc2:
+                    st.markdown("##### 📍 Top Regions")
+                    rc = Counter(all_regions)
+                    if rc:
+                        r_df = pd.DataFrame(rc.most_common(12), columns=["Region","Mentions"])
+                        fig_r = px.bar(r_df, x="Mentions", y="Region", orientation="h", color="Mentions", color_continuous_scale=["#2E86AB","#E85D04"])
+                        style_plotly(fig_r, height=400); fig_r.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(fig_r, use_container_width=True)
+
+                st.markdown("---")
+
+                # CHINA MAP
+                section_header("🗺️ China Healthcare Hubs")
+                REGION_COORDS = {"Beijing":(39.9,116.4),"Shanghai":(31.2,121.5),"Guangzhou":(23.1,113.3),"Shenzhen":(22.5,114.1),
+                    "Hainan":(19.2,109.7),"Tianjin":(39.1,117.2),"Chengdu":(30.6,104.1),"Wuhan":(30.6,114.3),
+                    "Hangzhou":(30.3,120.2),"Nanjing":(32.1,118.8),"Fangchenggang":(21.7,108.4),"Xi'an":(34.3,109.0)}
+                rc = Counter(all_regions)
+                if rc:
+                    mr = [{"Region":r, "Articles":c, "lat":REGION_COORDS[r][0], "lon":REGION_COORDS[r][1]} for r,c in rc.items() if r in REGION_COORDS]
+                    if mr:
+                        mdf = pd.DataFrame(mr)
+                        fig_m = px.scatter_geo(mdf, lat="lat", lon="lon", size="Articles", hover_name="Region", color="Articles",
+                                               color_continuous_scale=["#D4A017","#C73E1D"], size_max=35, scope="asia")
+                        fig_m.update_geos(center=dict(lat=35,lon=105), projection_scale=3, showland=True, landcolor="#F5F0E8", showocean=True, oceancolor="#EBF5FB", showcountries=True, countrycolor="#ccc")
+                        style_plotly(fig_m, height=450); fig_m.update_layout(margin=dict(t=10,l=0,r=0,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig_m, use_container_width=True)
+
+                st.markdown("---")
+                section_header("📋 Key Information")
+                with st.expander("💳 Payment Systems"): st.markdown("**Out-of-pocket** (WeChat Pay, Alipay, Visa/MC) • **International insurance** (Cigna, Bupa, Allianz) • **Medical packages** (procedure + hotel + interpreter) • **Boao Lecheng** special billing • **30-70% cheaper** than US/Europe")
+                with st.expander("📡 Remote Follow-up"): st.markdown("**WeDoctor/Good Doctor** platforms • **Hospital apps** (Ruijin, Tiantan) • **Video consultations** at JCI facilities • **Wearable monitoring** for cardiac/neuro • **International coordinators** assigned post-discharge")
+                with st.expander("🔒 Data Management"): st.markdown("**PIPL** (China's GDPR) since 2021 • **Data localization** required • **Cross-border transfer** needs security assessment • **JCI hospitals** follow international protocols • **EHR interoperability** improving")
+
+            # ═══════════════════════════════════════
+            # TAB 4: NOTES
+            # ═══════════════════════════════════════
+            with tab_notes:
+                section_header("📝 Notes & Research")
+                titles = df_cn["Title"].tolist()
+                sel_art = st.selectbox("📄 Select article", options=titles, index=0, key="cn_sel")
+                sel_r = df_cn[df_cn["Title"] == sel_art].iloc[0]
+                doc_id = int(sel_r["DocID"])
+
+                existing = session.execute(sa_text("SELECT note_text, private_url, ai_keywords FROM china_health_notes WHERE document_id = :d ORDER BY updated_at DESC LIMIT 1"), {"d": doc_id}).fetchone()
+                nc1, nc2 = st.columns([3,1])
+                with nc1:
+                    note_text = st.text_area("✏️ Notes", value=existing[0] if existing else "", height=180, key="cn_note")
+                    priv_url = st.text_input("🔗 Link", value=existing[1] if existing else "", key="cn_url")
+                with nc2:
+                    st.markdown("##### 🤖 AI Keywords")
+                    if existing and existing[2]:
+                        for k in existing[2].split(", "): st.markdown(f'<span style="background:#E8F5E9;color:#2E7D32;padding:2px 6px;border-radius:10px;font-size:0.75rem;">{k}</span>', unsafe_allow_html=True)
+
+                if st.button("💾 Save & Analyze", type="primary", key="cn_save"):
+                    combined = (note_text + " " + sel_r["Title"] + " " + sel_r["Summary"]).lower()
+                    nw = [w for w in re_cn.findall(r"[a-z]{4,}", combined) if w not in stop_w]
+                    ai_kw = ", ".join([w for w, _ in Counter(nw).most_common(10)])
+                    if existing:
+                        session.execute(sa_text("UPDATE china_health_notes SET note_text=:n, private_url=:u, ai_keywords=:k, updated_at=NOW() WHERE document_id=:d"), {"n":note_text,"u":priv_url,"k":ai_kw,"d":doc_id})
                     else:
-                        st.info("No notes yet. Select an article and add your first note!")
+                        session.execute(sa_text("INSERT INTO china_health_notes (document_id,note_text,private_url,ai_keywords) VALUES (:d,:n,:u,:k)"), {"d":doc_id,"n":note_text,"u":priv_url,"k":ai_kw})
+                    session.commit(); st.success("✅ Saved!"); st.rerun()
 
-                # ════════════════════════════════════════════════
-                # TAB 3: PRIVATE LINKS
-                # ════════════════════════════════════════════════
-                with tab_links:
-                    section_header("🔗 Private Chatham House Links")
+                st.markdown("---")
+                all_notes = session.execute(sa_text("SELECT cn.note_text,cn.ai_keywords,cn.updated_at,d.title FROM china_health_notes cn JOIN documents d ON cn.document_id=d.document_id ORDER BY cn.updated_at DESC")).fetchall()
+                if all_notes:
+                    for n in all_notes:
+                        with st.expander(f"📄 {n[3][:70]}"): st.markdown(n[0]); st.markdown(f"**Keywords:** {n[1]}" if n[1] else "")
 
-                    st.markdown("""
-                    <div style="background:#FFF8E1; border:1px solid #FFE082; padding:12px 16px; border-radius:8px; margin-bottom:16px;">
-                        <strong>Add private links</strong> from your Chatham House membership area.
-                        AI will extract keywords and countries automatically.
-                    </div>
-                    """, unsafe_allow_html=True)
+            # ═══════════════════════════════════════
+            # TAB 5: LINKS
+            # ═══════════════════════════════════════
+            with tab_links:
+                section_header("🔗 Links & Resources")
+                categories = ["Research Paper","News Article","Hospital Website","Government Policy","Advertising / Marketing","Patient Testimonial","Other"]
+                with st.form("cn_add_link", clear_on_submit=True):
+                    lk_url = st.text_input("🔗 URL"); lk_title = st.text_input("📄 Title")
+                    lk_cat = st.selectbox("📁 Category", categories); lk_desc = st.text_area("📝 Description", height=80)
+                    if st.form_submit_button("➕ Add Link", type="primary") and lk_url.strip():
+                        lk_kw = ", ".join([w for w,_ in Counter([w for w in re_cn.findall(r"[a-z]{4,}", (lk_title+" "+lk_desc).lower()) if w not in stop_w]).most_common(8)])
+                        session.execute(sa_text("INSERT INTO china_health_links (url,title,description,link_category,ai_keywords) VALUES (:u,:t,:d,:c,:k)"), {"u":lk_url,"t":lk_title,"d":lk_desc,"c":lk_cat,"k":lk_kw})
+                        session.commit(); st.success("✅ Added!"); st.rerun()
 
-                    # Add new link form
-                    with st.form("add_private_link", clear_on_submit=True):
-                        lk_url = st.text_input("🔗 URL", placeholder="https://www.chathamhouse.org/members/...")
-                        lk_title = st.text_input("📄 Title", placeholder="Article or report title")
-                        lk_desc = st.text_area("📝 Description / Notes", height=100,
-                                                placeholder="Your summary or key observations...")
-                        submitted = st.form_submit_button("➕ Add Link & Analyze", type="primary")
-
-                        if submitted and lk_url.strip():
-                            # AI extraction
-                            combined = (lk_title + " " + lk_desc).lower()
-                            lk_words = re_ch.findall(r"[a-z]{3,}", combined)
-                            lk_words = [w for w in lk_words if w not in stop_words and len(w) > 3]
-                            lk_kw = ", ".join([w for w, _ in Counter(lk_words).most_common(10)])
-                            lk_countries = ", ".join(extract_countries(combined))
-
-                            # AI summary (first 2 sentences of description or title)
-                            lk_summary = lk_desc[:300] if lk_desc else lk_title
-
-                            session.execute(sa_text("""
-                                INSERT INTO chatham_private_links (url, title, description, ai_keywords, ai_countries, ai_summary)
-                                VALUES (:url, :title, :desc, :kw, :cc, :summary)
-                            """), {"url": lk_url, "title": lk_title, "desc": lk_desc,
-                                   "kw": lk_kw, "cc": lk_countries, "summary": lk_summary})
-                            session.commit()
-                            st.success(f"✅ Link added! AI found {len(lk_kw.split(', '))} keywords.")
-                            st.rerun()
-
-                    # Display existing links
-                    st.markdown("---")
-                    private_links = session.execute(sa_text("""
-                        SELECT link_id, url, title, description, ai_keywords, ai_countries, created_at
-                        FROM chatham_private_links
-                        ORDER BY created_at DESC
-                    """)).fetchall()
-
-                    if private_links:
-                        st.markdown(f"**{len(private_links)} private links saved**")
-                        for lk in private_links:
-                            lk_id, lk_url, lk_title, lk_desc, lk_kw, lk_cc, lk_date = lk
-
-                            kw_pills = ""
-                            if lk_kw:
-                                kw_pills = " ".join(
-                                    f'<span style="background:#E8F5E9; color:#2E7D32; padding:2px 6px; border-radius:10px; font-size:0.72rem;">{k.strip()}</span>'
-                                    for k in lk_kw.split(",")[:8])
-
-                            cc_pills = ""
-                            if lk_cc:
-                                cc_pills = " ".join(
-                                    f'<span style="background:#FFF3E0; color:#E85D04; padding:2px 6px; border-radius:10px; font-size:0.72rem;">🌍 {c.strip()}</span>'
-                                    for c in lk_cc.split(",")[:5])
-
-                            st.markdown(f"""
-                            <div style="background:#FFFFFF; border-left:4px solid #7B2D8E;
-                                        padding:1rem 1.2rem; margin:0.4rem 0; border-radius:0 6px 6px 0;
-                                        box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                    <a href="{lk_url}" target="_blank"
-                                       style="color:#7B2D8E; font-weight:600; font-size:0.95rem; text-decoration:none;">
-                                        🔒 {lk_title or lk_url[:80]}
-                                    </a>
-                                    <span style="color:#95A5A6; font-size:0.75rem;">{lk_date.strftime('%d %b %Y') if lk_date else ''}</span>
-                                </div>
-                                <div style="margin:0.3rem 0;">{kw_pills} {cc_pills}</div>
-                                <div style="color:#7F8C8D; font-size:0.85rem; margin-top:0.3rem;">
-                                    {(lk_desc or '')[:200]}{'...' if lk_desc and len(lk_desc) > 200 else ''}
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-                            # Delete button
-                            if st.button(f"🗑️ Delete", key=f"del_link_{lk_id}"):
-                                session.execute(sa_text("DELETE FROM chatham_private_links WHERE link_id = :lid"), {"lid": lk_id})
-                                session.commit()
-                                st.rerun()
-                    else:
-                        st.info("No private links yet. Add your first Chatham House member link above!")
+                st.markdown("---")
+                links = session.execute(sa_text("SELECT link_id,url,title,description,link_category,ai_keywords,created_at FROM china_health_links ORDER BY created_at DESC")).fetchall()
+                if links:
+                    for lk in links:
+                        cc = {"Research Paper":"#7B2D8E","News Article":"#2E86AB","Hospital Website":"#0D7C66","Government Policy":"#1E3A5F","Advertising / Marketing":"#E85D04","Patient Testimonial":"#D4A017"}.get(lk[4],"#95A5A6")
+                        kp = " ".join(f'<span style="background:#F5F5F5;color:#444;padding:2px 6px;border-radius:10px;font-size:0.72rem;">{k.strip()}</span>' for k in (lk[5] or "").split(",")[:6] if k.strip())
+                        st.markdown(f'<div style="background:#FFF;border-left:4px solid {cc};padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;"><div style="display:flex;justify-content:space-between;"><a href="{lk[1]}" target="_blank" style="color:#0D2B45;font-weight:600;text-decoration:none;">{lk[2] or lk[1][:80]}</a><span style="background:{cc};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.72rem;">{lk[4]}</span></div><div style="margin:0.3rem 0;">{kp}</div><div style="color:#7F8C8D;font-size:0.85rem;">{(lk[3] or "")[:200]}</div></div>', unsafe_allow_html=True)
+                        if st.button("🗑️", key=f"cn_del_{lk[0]}"):
+                            session.execute(sa_text("DELETE FROM china_health_links WHERE link_id=:id"), {"id":lk[0]}); session.commit(); st.rerun()
+                else:
+                    st.info("No links yet.")
 
         else:
-            st.info("No Chatham House articles yet. Run the collector:")
-            st.code('python -c "from collectors.chatham_collector import run; run()"')
+            st.info("No China health articles yet. Run the collector:")
+            st.code('python -c "from collectors.china_medtourism_collector import run; run()"')
 
     finally:
         session.close()
