@@ -48,18 +48,21 @@ jobs:
       - name: Run cyber collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
         run: python -c "from collectors.cyber_collector import run; run()"
 
       - name: Run trends collector
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        continue-on-error: true
         run: python -c "from collectors.trends_collector import run; run()"
 
       - name: Run AbuseIPDB collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+        continue-on-error: true
         run: python -c "from collectors.abuseipdb_collector import run; run()"
 
       - name: Upload logs
@@ -73,14 +76,17 @@ jobs:
       - name: Run Chatham House collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
         run: python -c "from collectors.chatham_collector import run; run()"
 
       - name: Run China Medical Tourism collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
         run: python -c "from collectors.china_medtourism_collector import run; run()"
 
       - name: Run LinkedIn NeuroHealth collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
         run: python -c "from collectors.linkedin_neurohealth_collector import run; run()"
