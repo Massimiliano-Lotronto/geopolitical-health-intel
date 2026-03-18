@@ -79,3 +79,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -c "from collectors.china_medtourism_collector import run; run()"
+
+      - name: Run LinkedIn NeuroHealth collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -c "from collectors.linkedin_neurohealth_collector import run; run()"
