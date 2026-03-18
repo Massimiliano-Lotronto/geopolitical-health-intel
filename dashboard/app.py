@@ -306,6 +306,7 @@ with st.sidebar:
             "🌍 LMIC Digital MH",
             "🏛️ Chatham House",
             "🇨🇳 China Health",
+            "💼 LinkedIn NeuroHealth",
         ],
         label_visibility="collapsed",
     )
@@ -2851,6 +2852,437 @@ elif page == "🇨🇳 China Health":
         else:
             st.info("No China health articles yet. Run the collector:")
             st.code('python -c "from collectors.china_medtourism_collector import run; run()"')
+
+    finally:
+        session.close()
+
+    page_footer()
+
+# PAGE 13: LINKEDIN NEURO DIGITAL HEALTH
+# ════════════════════════════════════════════════════════
+elif page == "💼 LinkedIn NeuroHealth":
+    page_header("LinkedIn NeuroHealth", "Digital health intelligence from LinkedIn — neurodegenerative, mental health, telemedicine & startups")
+
+    session = get_session_cached()
+    try:
+        from sqlalchemy import text as sa_text
+        try:
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS linkedin_neuro_notes (
+                note_id SERIAL PRIMARY KEY, document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
+                note_text TEXT, ai_keywords TEXT, author TEXT, post_type VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"""))
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS linkedin_neuro_links (
+                link_id SERIAL PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT,
+                link_category VARCHAR(50), author TEXT, ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW())"""))
+            session.commit()
+        except Exception:
+            session.rollback()
+
+        li_docs = (
+            session.query(Document, Source)
+            .join(Source, Document.source_id == Source.source_id)
+            .filter(Document.document_type == "linkedin_neurohealth")
+            .order_by(desc(Document.publish_date))
+            .limit(500)
+            .all()
+        )
+
+        if li_docs:
+            df_li = pd.DataFrame([{
+                "DocID": d.document_id, "Date": d.publish_date,
+                "Title": d.title or "", "Source": s.source_name,
+                "URL": d.url or "", "Summary": (d.summary or ""),
+            } for d, s in li_docs])
+
+            df_li["Date"] = pd.to_datetime(df_li["Date"], errors="coerce")
+            df_li["Full_Text"] = (df_li["Title"] + " " + df_li["Summary"]).str.lower()
+
+            import re as re_li
+            from collections import Counter
+            import plotly.graph_objects as go
+
+            # ── TOPIC CLASSIFICATION ──
+            LI_TOPICS = {
+                "Digital Therapeutics (DTx)": ["digital therapeutics", "dtx", "prescription digital", "software as medical"],
+                "Neurodegenerative AI/ML": ["alzheimer", "parkinson", "dementia", "neurodegen", "als ", "amyotrophic", "huntington", "cognitive decline", "brain health"],
+                "Mental Health Apps": ["mental health", "depression", "anxiety", "wellness app", "mindfulness", "meditation", "behavioral health", "cbt ", "cognitive behavioral"],
+                "Digital Psychiatry": ["psychiatr", "telepsychiatry", "psycholog", "bipolar", "schizophren", "ptsd", "adhd", "mental disorder"],
+                "Telemedicine Neuro": ["telemedicine", "telehealth", "remote monitoring", "virtual care", "teleconsult", "remote patient"],
+                "Brain-Computer Interface": ["brain computer", "bci ", "neurointerface", "neural interface", "eeg wearable", "neurofeedback", "brain machine"],
+                "Wearables & Sensors": ["wearable", "sensor", "smartwatch", "biomarker", "continuous monitoring", "digital biomarker", "accelerometer"],
+                "Neurotech Startups": ["startup", "funding", "series a", "series b", "seed round", "venture", "incubator", "accelerator", "raised"],
+                "AI Diagnostics": ["ai diagnos", "machine learning", "deep learning", "computer vision", "image analysis", "mri analysis", "prediction model"],
+                "Drug Discovery & Biotech": ["drug discovery", "biotech", "clinical trial", "pharma", "pipeline", "fda approv", "ema approv"],
+                "Regulation & Policy": ["regulation", "policy", "fda", "ema", "ce mark", "compliance", "approval", "guideline"],
+                "Patient Outcomes": ["patient outcome", "quality of life", "caregiver", "patient experience", "real world evidence", "rwe"],
+            }
+
+            # ── COMPANY/ORG EXTRACTION ──
+            COMPANIES = {
+                "Biogen": ["biogen"], "Roche": ["roche"], "Eli Lilly": ["eli lilly", "lilly"],
+                "Novartis": ["novartis"], "AbbVie": ["abbvie"], "Eisai": ["eisai"],
+                "Akili Interactive": ["akili"], "Pear Therapeutics": ["pear therapeutics"],
+                "Woebot Health": ["woebot"], "Headspace": ["headspace"], "Calm": ["calm app", "calm "],
+                "BetterHelp": ["betterhelp"], "Talkspace": ["talkspace"],
+                "Neuralink": ["neuralink"], "Kernel": ["kernel neuro"],
+                "Verily (Google)": ["verily"], "Apple Health": ["apple health", "apple watch health"],
+                "Fitbit": ["fitbit"], "SWORD Health": ["sword health"],
+                "Oura": ["oura ring", "oura health"], "Medtronic": ["medtronic"],
+                "Boston Scientific": ["boston scientific"], "Philips": ["philips health"],
+                "Siemens Healthineers": ["siemens health"],
+                "Tempus": ["tempus ai"], "Flatiron": ["flatiron health"],
+            }
+
+            def extract_li_topics(text):
+                topics = []
+                for topic, kws in LI_TOPICS.items():
+                    if any(kw in text for kw in kws):
+                        topics.append(topic)
+                return topics if topics else ["General"]
+
+            def extract_companies(text):
+                return [c for c, kws in COMPANIES.items() if any(kw in text for kw in kws)]
+
+            # Detect post type from URL
+            def detect_post_type(url):
+                url_l = url.lower()
+                if "/pulse/" in url_l: return "Article"
+                elif "/posts/" in url_l: return "Post"
+                elif "/events/" in url_l: return "Event"
+                elif "/company/" in url_l: return "Company Page"
+                else: return "Other"
+
+            df_li["Topics"] = df_li["Full_Text"].apply(extract_li_topics)
+            df_li["PrimaryTopic"] = df_li["Topics"].apply(lambda x: x[0])
+            df_li["Companies"] = df_li["Full_Text"].apply(extract_companies)
+            df_li["PostType"] = df_li["URL"].apply(detect_post_type)
+
+            all_topics = [t for ts in df_li["Topics"] for t in ts]
+            all_companies = [c for cs in df_li["Companies"] for c in cs]
+
+            palette = ["#0077B5", "#1E3A5F", "#E85D04", "#7B2D8E", "#0D7C66",
+                        "#D4A017", "#2E86AB", "#A23B72", "#C73E1D", "#44AF69",
+                        "#F18F01", "#ECA72C", "#226F54", "#DA627D", "#4A4E69", "#00B4D8"]
+
+            stop_w = {"the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","it","this","that","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","not","no","its","as","if","than","so","up","out","about","into","over","after","under","between","through","during","before","more","most","other","some","also","all","each","both","few","many","much","any","which","what","who","when","where","why","their","them","they","he","she","we","you","his","her","our","your","s","new","one","two","us","my","me","these","those","has","been","can","may","its","such","only","said","like","just","know","get","make","way","linkedin","post","article","share","read","comment","published"}
+
+            # ════════════════════════════════════════
+            # TABS
+            # ════════════════════════════════════════
+            tab_dash, tab_companies, tab_notes, tab_links = st.tabs([
+                "📊 Dashboard & Trends",
+                "🏢 Companies & Players",
+                "📝 Notes & Analysis",
+                "🔗 Saved Posts & Links",
+            ])
+
+            # ═══════════════════════════════════════
+            # TAB 1: DASHBOARD
+            # ═══════════════════════════════════════
+            with tab_dash:
+                section_header("🔍 Filters")
+                fc1, fc2, fc3 = st.columns([2, 2, 2])
+                with fc1:
+                    sel_topics = st.multiselect("📌 Topic", sorted(set(all_topics)), default=[], key="li_tp")
+                with fc2:
+                    vd = df_li["Date"].dropna()
+                    dr = st.date_input("📅 Dates", value=(vd.min().date(), vd.max().date()), min_value=vd.min().date(), max_value=vd.max().date(), key="li_dr") if not vd.empty else None
+                with fc3:
+                    kw_s = st.text_input("🔎 Keyword", placeholder="e.g. Alzheimer, startup, wearable...", key="li_kw")
+
+                filtered = df_li.copy()
+                if sel_topics:
+                    filtered = filtered[filtered["Topics"].apply(lambda t: any(x in sel_topics for x in t))]
+                if dr and len(dr) == 2:
+                    filtered = filtered[(filtered["Date"] >= pd.Timestamp(dr[0])) & (filtered["Date"] <= pd.Timestamp(dr[1]))]
+                if kw_s.strip():
+                    filtered = filtered[filtered["Full_Text"].str.contains(kw_s.strip().lower(), na=False)]
+
+                f_topics = [t for ts in filtered["Topics"] for t in ts]
+                f_companies = [c for cs in filtered["Companies"] for c in cs]
+                f_types = filtered["PostType"].tolist()
+
+                st.caption(f"**{len(filtered)}** posts after filters")
+                st.markdown("---")
+
+                # KPIs
+                k1, k2, k3, k4 = st.columns(4)
+                with k1: kpi_card("Posts", str(len(filtered)))
+                with k2: kpi_card("Topics", str(len(set(f_topics))))
+                with k3: kpi_card("Companies", str(len(set(f_companies))))
+                with k4: kpi_card("Post Types", str(len(set(f_types))))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # TREEMAP + POST TYPE PIE
+                section_header("🗺️ Topic Landscape")
+                ct, cp = st.columns(2)
+                with ct:
+                    st.markdown("##### 🌳 Topic Treemap")
+                    tc = Counter(f_topics)
+                    if tc:
+                        tc_df = pd.DataFrame(tc.most_common(15), columns=["Topic", "Count"])
+                        fig = px.treemap(tc_df, path=["Topic"], values="Count", color="Count",
+                                          color_continuous_scale=["#0077B5", "#1E3A5F", "#E85D04"])
+                        fig.update_traces(textinfo="label+value", textfont_size=12)
+                        style_plotly(fig, height=400); fig.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                with cp:
+                    st.markdown("##### 📋 Content Type")
+                    ptc = Counter(f_types)
+                    if ptc:
+                        pt_df = pd.DataFrame(ptc.most_common(), columns=["Type", "Count"])
+                        fig_pt = px.pie(pt_df, values="Count", names="Type", color_discrete_sequence=palette, hole=0.4)
+                        fig_pt.update_traces(textinfo="label+percent"); style_plotly(fig_pt, height=400)
+                        st.plotly_chart(fig_pt, use_container_width=True)
+
+                st.markdown("---")
+
+                # SUNBURST: Topic → Company
+                section_header("☀️ Topic × Company Landscape")
+                sun_rows = []
+                for _, row in filtered.iterrows():
+                    for t in row["Topics"]:
+                        for c in (row["Companies"] or ["Independent"]):
+                            sun_rows.append({"Topic": t, "Company": c})
+                if sun_rows:
+                    sun_df = pd.DataFrame(sun_rows)
+                    sun_agg = sun_df.groupby(["Topic", "Company"]).size().reset_index(name="Count")
+                    fig_sb = px.sunburst(sun_agg, path=["Topic", "Company"], values="Count", color="Count",
+                                          color_continuous_scale=["#0077B5", "#E85D04", "#7B2D8E"])
+                    style_plotly(fig_sb, height=450); fig_sb.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                    st.plotly_chart(fig_sb, use_container_width=True)
+
+                st.markdown("---")
+
+                # TIMELINE
+                section_header("⏱️ Timeline")
+                tl = filtered.dropna(subset=["Date"]).copy()
+                if not tl.empty:
+                    tl["TC"] = tl["Topics"].apply(len).clip(lower=1)
+                    fig_tl = px.scatter(tl, x="Date", y="PrimaryTopic", size="TC", color="PrimaryTopic",
+                                         hover_name="Title", color_discrete_sequence=palette, size_max=16, opacity=0.8)
+                    style_plotly(fig_tl, height=380); fig_tl.update_layout(showlegend=False, margin=dict(l=10,r=10,t=10,b=40))
+                    st.plotly_chart(fig_tl, use_container_width=True)
+
+                st.markdown("---")
+
+                # WORD CLOUD + FREQUENCY
+                section_header("💬 Text Analysis")
+                corpus = " ".join(filtered["Title"].dropna().tolist() + filtered["Summary"].dropna().tolist()).lower()
+                words = [w for w in re_li.findall(r"[a-z]{3,}", corpus) if w not in stop_w]
+                wf = Counter(words); tw = wf.most_common(25)
+
+                wc1, wc2 = st.columns(2)
+                with wc1:
+                    st.markdown("##### ☁️ Word Cloud")
+                    if tw:
+                        try:
+                            from wordcloud import WordCloud; import matplotlib.pyplot as plt
+                            wc = WordCloud(width=800, height=400, background_color="white", colormap="Blues", max_words=60, contour_color="#0077B5").generate_from_frequencies(dict(tw))
+                            fig_wc, ax = plt.subplots(figsize=(10,5)); ax.imshow(wc, interpolation="bilinear"); ax.axis("off")
+                            st.pyplot(fig_wc, use_container_width=True); plt.close(fig_wc)
+                        except ImportError:
+                            tw_df = pd.DataFrame(tw[:15], columns=["Word","Count"])
+                            fig_fb = px.bar(tw_df, x="Count", y="Word", orientation="h", color="Count", color_continuous_scale=["#0077B5","#1E3A5F"])
+                            style_plotly(fig_fb, height=350); fig_fb.update_layout(showlegend=False, coloraxis_showscale=False)
+                            st.plotly_chart(fig_fb, use_container_width=True)
+                with wc2:
+                    st.markdown("##### 📊 Top Words")
+                    if tw:
+                        tw_df = pd.DataFrame(tw[:20], columns=["Word","Freq"])
+                        fig_f = px.bar(tw_df, x="Freq", y="Word", orientation="h", color="Freq", text="Freq", color_continuous_scale=["#0077B5","#E85D04"])
+                        fig_f.update_traces(textposition="outside"); style_plotly(fig_f, height=450)
+                        fig_f.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(fig_f, use_container_width=True)
+
+                st.markdown("---")
+
+                # KEYWORD TREND
+                section_header("📈 Keyword Trends")
+                top_kw = [w for w, _ in tw[:8]]
+                tl_kw = filtered.dropna(subset=["Date"]).copy()
+                if not tl_kw.empty and top_kw:
+                    tl_kw["YM"] = tl_kw["Date"].dt.to_period("M").astype(str)
+                    kw_rows = []
+                    for _, row in tl_kw.iterrows():
+                        for kw in top_kw:
+                            if kw in row["Full_Text"]: kw_rows.append({"Month": row["YM"], "Keyword": kw})
+                    if kw_rows:
+                        kw_agg = pd.DataFrame(kw_rows).groupby(["Month","Keyword"]).size().reset_index(name="Mentions")
+                        fig_kt = px.line(kw_agg, x="Month", y="Mentions", color="Keyword", markers=True, color_discrete_sequence=palette)
+                        style_plotly(fig_kt, height=350)
+                        fig_kt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)))
+                        st.plotly_chart(fig_kt, use_container_width=True)
+
+                st.markdown("---")
+
+                # HEATMAP
+                section_header("🔥 Topic Seasonality")
+                heat = filtered.dropna(subset=["Date"]).copy()
+                if not heat.empty:
+                    hr = []
+                    for _, row in heat.iterrows():
+                        for t in row["Topics"]: hr.append({"Month": row["Date"].strftime("%b"), "MN": row["Date"].month, "Topic": t})
+                    if hr:
+                        hdf = pd.DataFrame(hr)
+                        hp = hdf.pivot_table(index="Topic", columns="Month", values="MN", aggfunc="count", fill_value=0)
+                        mo = [m for m in ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] if m in hp.columns]
+                        hp = hp[mo]; tp12 = [t for t, _ in Counter(f_topics).most_common(12)]; hp = hp[hp.index.isin(tp12)]
+                        if not hp.empty:
+                            fig_hm = px.imshow(hp.values, x=hp.columns.tolist(), y=hp.index.tolist(), color_continuous_scale=["#F0F4F8","#0077B5","#1E3A5F"], aspect="auto", text_auto=True)
+                            style_plotly(fig_hm, height=max(280, len(hp)*35+60)); fig_hm.update_layout(coloraxis_showscale=False)
+                            st.plotly_chart(fig_hm, use_container_width=True)
+
+                st.markdown("---")
+
+                # POSTS
+                section_header("💼 LinkedIn Posts")
+                sort_o = st.selectbox("Sort", ["Most recent", "Alphabetical"], index=0, key="li_sort")
+                display = filtered.sort_values("Date", ascending=False) if sort_o == "Most recent" else filtered.sort_values("Title")
+                PS = 12; tp = max(1, -(-len(display)//PS)); pn = st.number_input("Page", 1, tp, 1, key="li_page")
+                sl = display.iloc[(pn-1)*PS : pn*PS]
+                for _, row in sl.iterrows():
+                    t_html = " ".join(f'<span style="background:#E3F2FD;color:#0077B5;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{t}</span>' for t in row["Topics"][:4])
+                    c_html = " ".join(f'<span style="background:#F3E5F5;color:#7B2D8E;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">🏢 {c}</span>' for c in row["Companies"][:2])
+                    type_color = {"Article":"#0077B5","Post":"#0D7C66","Event":"#E85D04","Company Page":"#7B2D8E"}.get(row["PostType"], "#95A5A6")
+                    ds = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
+                    st.markdown(f"""
+                    <div style="background:#FFF;border-left:4px solid #0077B5;padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <a href="{row['URL']}" target="_blank" style="color:#0D2B45;font-weight:600;font-size:0.95rem;text-decoration:none;">{row['Title'][:120]}</a>
+                            <div><span style="background:{type_color};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.7rem;">{row['PostType']}</span>
+                            <span style="color:#95A5A6;font-size:0.75rem;margin-left:8px;">{ds}</span></div>
+                        </div>
+                        <div style="margin:0.3rem 0;">{t_html} {c_html}</div>
+                        <div style="color:#7F8C8D;font-size:0.85rem;line-height:1.5;margin-top:0.3rem;">{row['Summary'][:200]}{'...' if len(row['Summary'])>200 else ''}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.caption(f"Page {pn} of {tp} — {len(display)} posts")
+
+            # ═══════════════════════════════════════
+            # TAB 2: COMPANIES
+            # ═══════════════════════════════════════
+            with tab_companies:
+                section_header("🏢 Key Companies & Players")
+                cc = Counter(all_companies)
+                if cc:
+                    cc_df = pd.DataFrame(cc.most_common(20), columns=["Company","Mentions"])
+                    fig_cc = px.bar(cc_df, x="Mentions", y="Company", orientation="h", color="Mentions", text="Mentions",
+                                     color_continuous_scale=["#0077B5","#7B2D8E","#E85D04"])
+                    fig_cc.update_traces(textposition="outside"); style_plotly(fig_cc, height=500)
+                    fig_cc.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig_cc, use_container_width=True)
+
+                    st.markdown("---")
+
+                    # Network: Company ↔ Topic
+                    section_header("🕸️ Company × Topic Network")
+                    import math
+                    edges = Counter()
+                    for _, row in df_li.iterrows():
+                        for c in row["Companies"]:
+                            for t in row["Topics"]:
+                                edges[(c, t)] += 1
+                    top_e = edges.most_common(40)
+                    if top_e:
+                        ns = set()
+                        for (c, t), _ in top_e: ns.add(("co", c)); ns.add(("tp", t))
+                        nl = list(ns); cos = [n for n in nl if n[0]=="co"]; tps = [n for n in nl if n[0]=="tp"]
+                        pos = {}
+                        for i, n in enumerate(cos): a = 2*math.pi*i/max(len(cos),1); pos[n] = (math.cos(a)*2.5, math.sin(a)*2.5)
+                        for i, n in enumerate(tps): a = 2*math.pi*i/max(len(tps),1); pos[n] = (math.cos(a)*1, math.sin(a)*1)
+
+                        ex, ey = [], []
+                        for (c, t), _ in top_e:
+                            x0,y0 = pos[("co",c)]; x1,y1 = pos[("tp",t)]
+                            ex += [x0,x1,None]; ey += [y0,y1,None]
+
+                        fig_n = go.Figure()
+                        fig_n.add_trace(go.Scatter(x=ex, y=ey, mode="lines", line=dict(width=0.7, color="rgba(150,150,150,0.4)"), hoverinfo="none"))
+                        fig_n.add_trace(go.Scatter(
+                            x=[pos[("co",n[1])][0] for n in cos], y=[pos[("co",n[1])][1] for n in cos],
+                            mode="markers+text", marker=dict(size=[max(8, cc.get(n[1],1)*3) for n in cos], color="#0077B5"),
+                            text=[n[1] for n in cos], textposition="top center", textfont=dict(size=8), name="Companies"))
+                        fig_n.add_trace(go.Scatter(
+                            x=[pos[("tp",n[1])][0] for n in tps], y=[pos[("tp",n[1])][1] for n in tps],
+                            mode="markers+text", marker=dict(size=12, color="#E85D04", symbol="diamond"),
+                            text=[n[1] for n in tps], textposition="bottom center", textfont=dict(size=7, color="#E85D04"), name="Topics"))
+                        style_plotly(fig_n, height=500)
+                        fig_n.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                        st.plotly_chart(fig_n, use_container_width=True)
+                else:
+                    st.info("No company mentions detected yet.")
+
+            # ═══════════════════════════════════════
+            # TAB 3: NOTES
+            # ═══════════════════════════════════════
+            with tab_notes:
+                section_header("📝 Notes & Analysis")
+                titles = df_li["Title"].tolist()
+                sel_art = st.selectbox("📄 Select post", options=titles, index=0, key="li_sel")
+                sel_r = df_li[df_li["Title"] == sel_art].iloc[0]
+                doc_id = int(sel_r["DocID"])
+
+                existing = session.execute(sa_text("SELECT note_text, ai_keywords, author FROM linkedin_neuro_notes WHERE document_id=:d ORDER BY updated_at DESC LIMIT 1"), {"d": doc_id}).fetchone()
+
+                nc1, nc2 = st.columns([3,1])
+                with nc1:
+                    note_text = st.text_area("✏️ Notes", value=existing[0] if existing else "", height=180, key="li_note")
+                    author = st.text_input("👤 Author / Influencer", value=existing[2] if existing else "", key="li_auth")
+                with nc2:
+                    st.markdown("##### 🤖 AI Keywords")
+                    if existing and existing[1]:
+                        for k in existing[1].split(", "): st.markdown(f'<span style="background:#E3F2FD;color:#0077B5;padding:2px 6px;border-radius:10px;font-size:0.75rem;">{k}</span>', unsafe_allow_html=True)
+
+                if st.button("💾 Save & Analyze", type="primary", key="li_save"):
+                    combined = (note_text + " " + sel_r["Title"] + " " + sel_r["Summary"]).lower()
+                    nw = [w for w in re_li.findall(r"[a-z]{4,}", combined) if w not in stop_w]
+                    ai_kw = ", ".join([w for w, _ in Counter(nw).most_common(10)])
+                    if existing:
+                        session.execute(sa_text("UPDATE linkedin_neuro_notes SET note_text=:n, ai_keywords=:k, author=:a, updated_at=NOW() WHERE document_id=:d"), {"n":note_text,"k":ai_kw,"a":author,"d":doc_id})
+                    else:
+                        session.execute(sa_text("INSERT INTO linkedin_neuro_notes (document_id,note_text,ai_keywords,author) VALUES (:d,:n,:k,:a)"), {"d":doc_id,"n":note_text,"k":ai_kw,"a":author})
+                    session.commit(); st.success("✅ Saved!"); st.rerun()
+
+                st.markdown("---")
+                all_n = session.execute(sa_text("SELECT n.note_text,n.ai_keywords,n.author,n.updated_at,d.title FROM linkedin_neuro_notes n JOIN documents d ON n.document_id=d.document_id ORDER BY n.updated_at DESC")).fetchall()
+                if all_n:
+                    for n in all_n:
+                        with st.expander(f"💼 {n[4][:70]}"): st.markdown(n[0]); st.markdown(f"**Author:** {n[2]}" if n[2] else ""); st.markdown(f"**Keywords:** {n[1]}" if n[1] else "")
+
+            # ═══════════════════════════════════════
+            # TAB 4: LINKS
+            # ═══════════════════════════════════════
+            with tab_links:
+                section_header("🔗 Saved Posts & Resources")
+                categories = ["LinkedIn Post","LinkedIn Article","Company Profile","Research Paper","News","Podcast/Video","Other"]
+                with st.form("li_add_link", clear_on_submit=True):
+                    lk_url = st.text_input("🔗 URL"); lk_title = st.text_input("📄 Title")
+                    lk_cat = st.selectbox("📁 Category", categories); lk_auth = st.text_input("👤 Author")
+                    lk_desc = st.text_area("📝 Notes", height=80)
+                    if st.form_submit_button("➕ Add", type="primary") and lk_url.strip():
+                        lk_kw = ", ".join([w for w,_ in Counter([w for w in re_li.findall(r"[a-z]{4,}", (lk_title+" "+lk_desc).lower()) if w not in stop_w]).most_common(8)])
+                        session.execute(sa_text("INSERT INTO linkedin_neuro_links (url,title,description,link_category,author,ai_keywords) VALUES (:u,:t,:d,:c,:a,:k)"), {"u":lk_url,"t":lk_title,"d":lk_desc,"c":lk_cat,"a":lk_auth,"k":lk_kw})
+                        session.commit(); st.success("✅ Added!"); st.rerun()
+
+                st.markdown("---")
+                links = session.execute(sa_text("SELECT link_id,url,title,description,link_category,author,ai_keywords,created_at FROM linkedin_neuro_links ORDER BY created_at DESC")).fetchall()
+                if links:
+                    for lk in links:
+                        cc = {"LinkedIn Post":"#0077B5","LinkedIn Article":"#1E3A5F","Company Profile":"#7B2D8E","Research Paper":"#0D7C66","News":"#2E86AB","Podcast/Video":"#E85D04"}.get(lk[4],"#95A5A6")
+                        kp = " ".join(f'<span style="background:#F5F5F5;color:#444;padding:2px 6px;border-radius:10px;font-size:0.72rem;">{k.strip()}</span>' for k in (lk[6] or "").split(",")[:6] if k.strip())
+                        st.markdown(f'<div style="background:#FFF;border-left:4px solid {cc};padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;"><div style="display:flex;justify-content:space-between;"><a href="{lk[1]}" target="_blank" style="color:#0077B5;font-weight:600;text-decoration:none;">{lk[2] or lk[1][:80]}</a><span style="background:{cc};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.72rem;">{lk[4]}</span></div><div style="margin:0.2rem 0;font-size:0.8rem;color:#666;">👤 {lk[5] or "Unknown"}</div><div style="margin:0.3rem 0;">{kp}</div><div style="color:#7F8C8D;font-size:0.85rem;">{(lk[3] or "")[:200]}</div></div>', unsafe_allow_html=True)
+                        if st.button("🗑️", key=f"li_del_{lk[0]}"):
+                            session.execute(sa_text("DELETE FROM linkedin_neuro_links WHERE link_id=:id"), {"id":lk[0]}); session.commit(); st.rerun()
+                else:
+                    st.info("No saved posts yet. Add LinkedIn posts and resources above!")
+
+        else:
+            st.info("No LinkedIn posts yet. Run the collector:")
+            st.code('python -c "from collectors.linkedin_neurohealth_collector import run; run()"')
 
     finally:
         session.close()
