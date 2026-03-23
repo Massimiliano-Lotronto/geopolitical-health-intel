@@ -357,6 +357,7 @@ with st.sidebar:
             "🏛️ Chatham House",
             "🇨🇳 China Health",
             "💼 LinkedIn NeuroHealth",
+            "🤖 AI Agent Hospital",
         ],
         label_visibility="collapsed",
         key="main_nav",
@@ -3712,6 +3713,362 @@ elif page == "💼 LinkedIn NeuroHealth":
         else:
             st.info("No LinkedIn posts yet. Run the collector:")
             st.code('python -c "from collectors.linkedin_neurohealth_collector import run; run()"')
+
+    finally:
+        session.close()
+
+    page_footer()
+
+# PAGE 14: AI AGENT HOSPITAL (Tsinghua AIR)
+# ════════════════════════════════════════════════════════
+elif page == "🤖 AI Agent Hospital":
+    page_header("AI Agent Hospital", "Tsinghua University AIR — MedAgent-Zero, virtual hospital AI agents & DeepSeek integration")
+
+    session = get_session_cached()
+    try:
+        from sqlalchemy import text as sa_text
+        try:
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS ai_hospital_notes (
+                note_id SERIAL PRIMARY KEY, document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
+                note_text TEXT, ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"""))
+            session.execute(sa_text("""CREATE TABLE IF NOT EXISTS ai_hospital_links (
+                link_id SERIAL PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT,
+                link_category VARCHAR(50), ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW())"""))
+            session.commit()
+        except Exception:
+            session.rollback()
+
+        ai_docs = (
+            session.query(Document, Source)
+            .join(Source, Document.source_id == Source.source_id)
+            .filter(Document.document_type == "ai_agent_hospital")
+            .order_by(desc(Document.publish_date))
+            .limit(500)
+            .all()
+        )
+
+        if ai_docs:
+            df_ai = pd.DataFrame([{
+                "DocID": d.document_id, "Date": d.publish_date,
+                "Title": d.title or "", "Source": s.source_name,
+                "URL": d.url or "", "Summary": (d.summary or ""),
+            } for d, s in ai_docs])
+
+            df_ai["Date"] = pd.to_datetime(df_ai["Date"], errors="coerce")
+            df_ai["Full_Text"] = (df_ai["Title"] + " " + df_ai["Summary"]).str.lower()
+
+            import re as re_ai
+            from collections import Counter
+
+            AI_TOPICS = {
+                "AI Agents & LLM": ["agent", "llm", "large language model", "chatgpt", "gpt-4", "gpt-3", "autonomous"],
+                "Self-Evolution": ["self-evolv", "medagent-zero", "evolution", "self-improv", "learning from cases"],
+                "Clinical Diagnostics": ["diagnos", "diagnostic", "accuracy", "medqa", "clinical decision"],
+                "Virtual Hospital": ["virtual hospital", "simulacrum", "simulation", "virtual patient", "digital twin"],
+                "Telemedicine": ["telemedicine", "telehealth", "remote", "rural", "smartphone", "5g"],
+                "Medical Education": ["medical education", "training", "medical student", "teaching", "curriculum"],
+                "DeepSeek Integration": ["deepseek", "open-source", "local deployment", "intranet"],
+                "Data Privacy": ["data privacy", "data sovereign", "anonymiz", "cybersecurity", "pipl", "compliance"],
+                "International Collaboration": ["international", "middle east", "southeast asia", "global", "cooperation"],
+                "Hospital Infrastructure": ["chang gung", "hospital expansion", "beds", "outpatient", "infrastructure"],
+                "Drug Discovery": ["drug", "drugclip", "pharmaceutical", "virtual screening", "alphafold"],
+                "Tairex & Startups": ["tairex", "zijing", "startup", "spinoff", "spin-off", "pilot"],
+            }
+
+            ENTITIES = {
+                "Tsinghua AIR": ["tsinghua", "air ", "institute for ai"],
+                "Prof. Liu Yang": ["liu yang", "yang liu"],
+                "MedAgent-Zero": ["medagent", "med-agent"],
+                "Tairex": ["tairex"],
+                "Zijing Zhikang": ["zijing", "zhikang", "zijing ai"],
+                "DeepSeek": ["deepseek"],
+                "Chang Gung Hospital": ["chang gung"],
+                "Ruijin Hospital": ["ruijin"],
+                "Tongji University": ["tongji"],
+            }
+
+            def extract_ai_topics(text):
+                return [t for t, kws in AI_TOPICS.items() if any(kw in text for kw in kws)] or ["General"]
+
+            def extract_entities(text):
+                return [e for e, kws in ENTITIES.items() if any(kw in text for kw in kws)]
+
+            df_ai["Topics"] = df_ai["Full_Text"].apply(extract_ai_topics)
+            df_ai["PrimaryTopic"] = df_ai["Topics"].apply(lambda x: x[0])
+            df_ai["Entities"] = df_ai["Full_Text"].apply(extract_entities)
+
+            all_topics = [t for ts in df_ai["Topics"] for t in ts]
+            all_entities = [e for es in df_ai["Entities"] for e in es]
+
+            palette = ["#7B2D8E", "#0D7C66", "#E85D04", "#1E3A5F", "#C73E1D", "#D4A017",
+                        "#2E86AB", "#A23B72", "#F18F01", "#44AF69", "#00B4D8", "#226F54"]
+
+            stop_w = {"the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","it","this","that","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","not","no","its","as","if","than","so","up","out","about","into","over","after","under","between","through","during","before","more","most","other","some","also","all","each","both","few","many","much","any","which","what","who","when","where","why","their","them","they","he","she","we","you","his","her","our","your","s","new","one","two","us","my","me","these","those","china","chinese","has","been","can","may","its","such","only","said","according","first","using","based","used"}
+
+            tab_dash, tab_arch, tab_notes, tab_links = st.tabs(["📊 Dashboard", "🏗️ Architecture & Research", "📝 Notes", "🔗 Links & Papers"])
+
+            # ═══════════ TAB 1: DASHBOARD ═══════════
+            with tab_dash:
+                section_header("🔍 Filters")
+                fc1, fc2, fc3 = st.columns([2, 2, 2])
+                with fc1: sel_tp = st.multiselect("📌 Topic", sorted(set(all_topics)), default=[], key="aih_tp")
+                with fc2:
+                    vd = df_ai["Date"].dropna()
+                    dr = st.date_input("📅 Dates", value=(vd.min().date(), vd.max().date()), min_value=vd.min().date(), max_value=vd.max().date(), key="aih_dr") if not vd.empty else None
+                with fc3: kw = st.text_input("🔎 Keyword", key="aih_kw")
+
+                filtered = df_ai.copy()
+                if sel_tp: filtered = filtered[filtered["Topics"].apply(lambda t: any(x in sel_tp for x in t))]
+                if dr and len(dr)==2: filtered = filtered[(filtered["Date"]>=pd.Timestamp(dr[0]))&(filtered["Date"]<=pd.Timestamp(dr[1]))]
+                if kw.strip(): filtered = filtered[filtered["Full_Text"].str.contains(kw.strip().lower(), na=False)]
+
+                f_topics = [t for ts in filtered["Topics"] for t in ts]
+                f_entities = [e for es in filtered["Entities"] for e in es]
+                st.caption(f"**{len(filtered)}** articles"); st.markdown("---")
+
+                k1,k2,k3,k4 = st.columns(4)
+                with k1: kpi_card("Articles", str(len(filtered)))
+                with k2: kpi_card("Topics", str(len(set(f_topics))))
+                with k3: kpi_card("Entities", str(len(set(f_entities))))
+                with k4:
+                    this_m = len(filtered[filtered["Date"]>=pd.Timestamp.now()-pd.Timedelta(days=30)])
+                    kpi_card("This Month", str(this_m))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # TREEMAP + SUNBURST
+                section_header("🗺️ Topic Landscape")
+                ct, cs = st.columns(2)
+                with ct:
+                    st.markdown("##### 🌳 Topic Treemap")
+                    tc = Counter(f_topics)
+                    if tc:
+                        tc_df = pd.DataFrame(tc.most_common(15), columns=["Topic","Count"])
+                        fig = px.treemap(tc_df, path=["Topic"], values="Count", color="Count", color_continuous_scale=["#7B2D8E","#0D7C66","#E85D04"])
+                        fig.update_traces(textinfo="label+value", textfont_size=12); style_plotly(fig, height=400)
+                        fig.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig, use_container_width=True)
+                with cs:
+                    st.markdown("##### ☀️ Entity × Topic")
+                    sr = [{"Entity": e, "Topic": t} for _, row in filtered.iterrows() for e in (row["Entities"] or ["Unknown"]) for t in row["Topics"]]
+                    if sr:
+                        sa = pd.DataFrame(sr).groupby(["Entity","Topic"]).size().reset_index(name="Count")
+                        fs = px.sunburst(sa, path=["Entity","Topic"], values="Count", color="Count", color_continuous_scale=["#2E86AB","#7B2D8E","#E85D04"])
+                        style_plotly(fs, height=400); fs.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fs, use_container_width=True)
+
+                st.markdown("---")
+
+                # TIMELINE
+                section_header("⏱️ Timeline")
+                tl = filtered.dropna(subset=["Date"]).copy()
+                if not tl.empty:
+                    tl["TC"] = tl["Topics"].apply(len).clip(lower=1)
+                    ft = px.scatter(tl, x="Date", y="PrimaryTopic", size="TC", color="PrimaryTopic", hover_name="Title", color_discrete_sequence=palette, size_max=16, opacity=0.8)
+                    style_plotly(ft, height=380); ft.update_layout(showlegend=False, margin=dict(l=10,r=10,t=10,b=40))
+                    st.plotly_chart(ft, use_container_width=True)
+
+                st.markdown("---")
+
+                # WORD CLOUD + FREQ
+                section_header("💬 Text Analysis")
+                corpus = " ".join(filtered["Title"].dropna().tolist()+filtered["Summary"].dropna().tolist()).lower()
+                words = [w for w in re_ai.findall(r"[a-z]{3,}", corpus) if w not in stop_w]
+                wf = Counter(words); tw = wf.most_common(25)
+                wc1, wc2 = st.columns(2)
+                with wc1:
+                    st.markdown("##### ☁️ Word Cloud")
+                    if tw:
+                        try:
+                            from wordcloud import WordCloud; import matplotlib.pyplot as plt
+                            wc = WordCloud(width=800, height=400, background_color="white", colormap="Purples", max_words=60, contour_color="#7B2D8E").generate_from_frequencies(dict(tw))
+                            fig_wc, ax = plt.subplots(figsize=(10,5)); ax.imshow(wc, interpolation="bilinear"); ax.axis("off")
+                            st.pyplot(fig_wc, use_container_width=True); plt.close(fig_wc)
+                        except ImportError:
+                            tw_df = pd.DataFrame(tw[:15], columns=["Word","Count"])
+                            fig_fb = px.bar(tw_df, x="Count", y="Word", orientation="h", color="Count", color_continuous_scale=["#7B2D8E","#E85D04"])
+                            style_plotly(fig_fb, height=350); st.plotly_chart(fig_fb, use_container_width=True)
+                with wc2:
+                    st.markdown("##### 📊 Top Words")
+                    if tw:
+                        tw_df = pd.DataFrame(tw[:20], columns=["Word","Freq"])
+                        ff = px.bar(tw_df, x="Freq", y="Word", orientation="h", color="Freq", text="Freq", color_continuous_scale=["#2E86AB","#7B2D8E"])
+                        ff.update_traces(textposition="outside"); style_plotly(ff, height=450)
+                        ff.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                        st.plotly_chart(ff, use_container_width=True)
+
+                st.markdown("---")
+
+                # KEYWORD TREND
+                section_header("📈 Keyword Trends")
+                top_kw = [w for w, _ in tw[:8]]
+                tl_kw = filtered.dropna(subset=["Date"]).copy()
+                if not tl_kw.empty and top_kw:
+                    cutoff = pd.Timestamp.now() - pd.Timedelta(days=730)
+                    tl_r = tl_kw[tl_kw["Date"]>=cutoff].copy()
+                    if tl_r.empty: tl_r = tl_kw.copy()
+                    tl_r["YM"] = tl_r["Date"].dt.to_period("M").astype(str)
+                    kr = [{"Month":row["YM"],"Keyword":k} for _,row in tl_r.iterrows() for k in top_kw if k in row["Full_Text"]]
+                    if kr:
+                        ka = pd.DataFrame(kr).groupby(["Month","Keyword"]).size().reset_index(name="Mentions")
+                        fkt = px.area(ka, x="Month", y="Mentions", color="Keyword", color_discrete_sequence=palette, line_shape="spline")
+                        fkt.update_traces(line=dict(width=2), opacity=0.7); style_plotly(fkt, height=350)
+                        fkt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)))
+                        st.plotly_chart(fkt, use_container_width=True)
+
+                st.markdown("---")
+
+                # ARTICLES
+                section_header("📰 Articles")
+                so = st.selectbox("Sort", ["Most recent","Alphabetical"], index=0, key="aih_sort")
+                disp = filtered.sort_values("Date", ascending=False) if so=="Most recent" else filtered.sort_values("Title")
+                PS=12; tp=max(1,-(-len(disp)//PS)); pn=st.number_input("Page",1,tp,1,key="aih_page")
+                for _, row in disp.iloc[(pn-1)*PS:pn*PS].iterrows():
+                    t_html = " ".join(f'<span style="background:#F3E5F5;color:#7B2D8E;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{t}</span>' for t in row["Topics"][:4])
+                    e_html = " ".join(f'<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{e}</span>' for e in row["Entities"][:3])
+                    ds = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
+                    st.markdown(f"""<div style="background:#FFF;border-left:4px solid #7B2D8E;padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <a href="{row['URL']}" target="_blank" style="color:#0D2B45;font-weight:600;font-size:0.95rem;text-decoration:none;">{row['Title'][:120]}</a>
+                            <span style="color:#95A5A6;font-size:0.75rem;white-space:nowrap;margin-left:1rem;">{ds}</span></div>
+                        <div style="margin:0.3rem 0;">{t_html} {e_html}</div>
+                        <div style="color:#7F8C8D;font-size:0.85rem;line-height:1.5;margin-top:0.3rem;">{row['Summary'][:200]}{'...' if len(row['Summary'])>200 else ''}</div></div>""", unsafe_allow_html=True)
+                st.caption(f"Page {pn} of {tp} — {len(disp)} articles")
+
+            # ═══════════ TAB 2: ARCHITECTURE ═══════════
+            with tab_arch:
+                section_header("🏗️ AI Agent Hospital Architecture")
+
+                st.markdown("""
+                <div style="background:linear-gradient(135deg, #F5F0FF 0%, #F0F8FF 100%);border:1px solid #D6CCE6;border-left:4px solid #7B2D8E;padding:16px 20px;border-radius:0 10px 10px 0;margin-bottom:20px;">
+                    <div style="font-size:1rem;font-weight:700;color:#3C3489;margin-bottom:8px;">🤖 Agent Hospital — World's First AI-Powered Virtual Hospital</div>
+                    <div style="font-size:0.88rem;color:#444;line-height:1.7;">
+                        Developed by <strong>Tsinghua University AIR</strong> (Institute for AI Industry Research), led by <strong>Prof. Liu Yang</strong>.<br>
+                        Paper: <a href="https://arxiv.org/abs/2405.02957" target="_blank" style="color:#7B2D8E;">arXiv:2405.02957</a> — "Agent Hospital: A Simulacrum of Hospital with Evolvable Medical Agents"
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("##### Core Framework: MedAgent-Zero")
+                    st.markdown("""
+                    - **Self-evolving** AI doctors that learn from simulated cases
+                    - No manual data labeling needed
+                    - LLM-powered agents (GPT-3.5/4, upgrading to latest)
+                    - After 10,000 virtual patients: **93.06% accuracy** on MedQA
+                    - Time-compression engine simulates full patient journey
+                    """)
+
+                with c2:
+                    st.markdown("##### Scale & Deployment")
+                    st.markdown("""
+                    - **42 AI doctors** across **21 clinical specialties**
+                    - **300+ diseases** covered
+                    - 14 doctor agents + 4 nurse agents (original design)
+                    - Beijing Tsinghua Chang Gung Hospital: **1,500 beds**
+                    - Up to **10,000 outpatients/day**
+                    """)
+
+                st.markdown("---")
+
+                st.markdown("##### Key Milestones")
+                milestones = [
+                    ("May 2024", "Paper published on arXiv — first AI hospital concept"),
+                    ("Nov 2024", "Zijing AI Doctor launched (42 doctors, 21 specialties)"),
+                    ("Q1 2025", "Tairex public pilot begins"),
+                    ("Apr 2025", "Official inauguration by Tsinghua President Li Luming"),
+                    ("May 2025", "Chang Gung Hospital Phase II opens (+500 beds)"),
+                    ("2025+", "International collaborations: Middle East, SE Asia, Western countries"),
+                ]
+                for date, event in milestones:
+                    st.markdown(f"""
+                    <div style="display:flex;gap:12px;margin:6px 0;align-items:flex-start;">
+                        <span style="background:#7B2D8E;color:#fff;padding:2px 10px;border-radius:12px;font-size:0.72rem;font-weight:600;white-space:nowrap;">{date}</span>
+                        <span style="font-size:0.88rem;color:#444;">{event}</span>
+                    </div>""", unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                st.markdown("##### DeepSeek AI Integration")
+                st.markdown("""
+                <div style="background:#F0F8FF;border:1px solid #B8D4E3;padding:14px 18px;border-radius:8px;">
+                    <div style="font-size:0.88rem;color:#444;line-height:1.7;">
+                        <strong>260+ hospitals</strong> across <strong>93.5% of China's provinces</strong> have deployed DeepSeek locally.<br>
+                        Key deployments: Ruijin Hospital (3,000 pathology slides/day), Chengdu First People's Hospital (telemedicine),
+                        Shanghai Sixth Hospital Jinshan Branch (real-time AI workstations).<br>
+                        All data stays within hospital firewalls — full compliance with China's PIPL data sovereignty laws.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # Entity mentions chart
+                section_header("🏢 Key Players")
+                ec = Counter(all_entities)
+                if ec:
+                    ec_df = pd.DataFrame(ec.most_common(10), columns=["Entity","Mentions"])
+                    fig_e = px.bar(ec_df, x="Mentions", y="Entity", orientation="h", color="Mentions", text="Mentions", color_continuous_scale=["#7B2D8E","#0D7C66"])
+                    fig_e.update_traces(textposition="outside"); style_plotly(fig_e, height=350)
+                    fig_e.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig_e, use_container_width=True)
+
+            # ═══════════ TAB 3: NOTES ═══════════
+            with tab_notes:
+                section_header("📝 Notes & Research")
+                titles = df_ai["Title"].tolist()
+                sel = st.selectbox("📄 Select article", titles, index=0, key="aih_sel")
+                sr = df_ai[df_ai["Title"]==sel].iloc[0]; did = int(sr["DocID"])
+                ex = session.execute(sa_text("SELECT note_text,ai_keywords FROM ai_hospital_notes WHERE document_id=:d ORDER BY updated_at DESC LIMIT 1"), {"d":did}).fetchone()
+                nc1,nc2 = st.columns([3,1])
+                with nc1:
+                    nt = st.text_area("✏️ Notes", value=ex[0] if ex else "", height=180, key="aih_note")
+                with nc2:
+                    st.markdown("##### 🤖 AI Keywords")
+                    if ex and ex[1]:
+                        for k in ex[1].split(", "): st.markdown(f'<span style="background:#F3E5F5;color:#7B2D8E;padding:2px 6px;border-radius:10px;font-size:0.75rem;">{k}</span>', unsafe_allow_html=True)
+                if st.button("💾 Save & Analyze", type="primary", key="aih_save"):
+                    combined = (nt+" "+sr["Title"]+" "+sr["Summary"]).lower()
+                    nw = [w for w in re_ai.findall(r"[a-z]{4,}", combined) if w not in stop_w]
+                    ak = ", ".join([w for w,_ in Counter(nw).most_common(10)])
+                    if ex: session.execute(sa_text("UPDATE ai_hospital_notes SET note_text=:n,ai_keywords=:k,updated_at=NOW() WHERE document_id=:d"), {"n":nt,"k":ak,"d":did})
+                    else: session.execute(sa_text("INSERT INTO ai_hospital_notes (document_id,note_text,ai_keywords) VALUES (:d,:n,:k)"), {"d":did,"n":nt,"k":ak})
+                    session.commit(); st.success("✅ Saved!"); st.rerun()
+
+                st.markdown("---")
+                an = session.execute(sa_text("SELECT n.note_text,n.ai_keywords,n.updated_at,d.title FROM ai_hospital_notes n JOIN documents d ON n.document_id=d.document_id ORDER BY n.updated_at DESC")).fetchall()
+                if an:
+                    for n in an:
+                        with st.expander(f"📄 {n[3][:70]}"): st.markdown(n[0]); st.markdown(f"**Keywords:** {n[1]}" if n[1] else "")
+
+            # ═══════════ TAB 4: LINKS ═══════════
+            with tab_links:
+                section_header("🔗 Links & Papers")
+                cats = ["arXiv Paper","Research Article","News","Hospital Website","Startup","GitHub Repo","Video/Presentation","Other"]
+                with st.form("aih_add", clear_on_submit=True):
+                    lu = st.text_input("🔗 URL"); lt = st.text_input("📄 Title")
+                    lc = st.selectbox("📁 Category", cats); ld = st.text_area("📝 Notes", height=80)
+                    if st.form_submit_button("➕ Add", type="primary") and lu.strip():
+                        lk = ", ".join([w for w,_ in Counter([w for w in re_ai.findall(r"[a-z]{4,}", (lt+" "+ld).lower()) if w not in stop_w]).most_common(8)])
+                        session.execute(sa_text("INSERT INTO ai_hospital_links (url,title,description,link_category,ai_keywords) VALUES (:u,:t,:d,:c,:k)"), {"u":lu,"t":lt,"d":ld,"c":lc,"k":lk})
+                        session.commit(); st.success("✅ Added!"); st.rerun()
+
+                st.markdown("---")
+                links = session.execute(sa_text("SELECT link_id,url,title,description,link_category,ai_keywords,created_at FROM ai_hospital_links ORDER BY created_at DESC")).fetchall()
+                if links:
+                    for lk in links:
+                        cc = {"arXiv Paper":"#7B2D8E","Research Article":"#0D7C66","News":"#2E86AB","Hospital Website":"#C73E1D","Startup":"#E85D04","GitHub Repo":"#1E3A5F","Video/Presentation":"#D4A017"}.get(lk[4],"#95A5A6")
+                        kp = " ".join(f'<span style="background:#F5F5F5;color:#444;padding:2px 6px;border-radius:10px;font-size:0.72rem;">{k.strip()}</span>' for k in (lk[5] or "").split(",")[:6] if k.strip())
+                        st.markdown(f'<div style="background:#FFF;border-left:4px solid {cc};padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;"><div style="display:flex;justify-content:space-between;"><a href="{lk[1]}" target="_blank" style="color:#0D2B45;font-weight:600;text-decoration:none;">{lk[2] or lk[1][:80]}</a><span style="background:{cc};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.72rem;">{lk[4]}</span></div><div style="margin:0.3rem 0;">{kp}</div><div style="color:#7F8C8D;font-size:0.85rem;">{(lk[3] or "")[:200]}</div></div>', unsafe_allow_html=True)
+                        if st.button("🗑️", key=f"aih_del_{lk[0]}"):
+                            session.execute(sa_text("DELETE FROM ai_hospital_links WHERE link_id=:id"), {"id":lk[0]}); session.commit(); st.rerun()
+                else:
+                    st.info("No links yet. Add arXiv papers, news articles, and research resources!")
+
+        else:
+            st.info("No AI Agent Hospital articles yet. Run the collector:")
+            st.code('python -c "from collectors.ai_agent_hospital_collector import run; run()"')
 
     finally:
         session.close()
