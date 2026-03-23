@@ -90,3 +90,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         continue-on-error: true
         run: python -c "from collectors.linkedin_neurohealth_collector import run; run()"
+
+      - name: Run AI Agent Hospital collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -c "from collectors.ai_agent_hospital_collector import run; run()"
