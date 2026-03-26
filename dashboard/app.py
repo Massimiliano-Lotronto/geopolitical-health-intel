@@ -3719,10 +3719,10 @@ elif page == "💼 LinkedIn NeuroHealth":
 
     page_footer()
 
-# PAGE 14: AI AGENT HOSPITAL (Tsinghua AIR)
+# PAGE 14: AI AGENT HOSPITAL (Tsinghua AIR) v2.0
 # ════════════════════════════════════════════════════════
 elif page == "🤖 AI Agent Hospital":
-    page_header("AI Agent Hospital", "Tsinghua University AIR — MedAgent-Zero, virtual hospital AI agents & DeepSeek integration")
+    page_header("AI Agent Hospital", "Tsinghua University AIR — MedAgent-Zero, Chinese university AI healthcare & DeepSeek integration")
 
     session = get_session_cached()
     try:
@@ -3730,7 +3730,8 @@ elif page == "🤖 AI Agent Hospital":
         try:
             session.execute(sa_text("""CREATE TABLE IF NOT EXISTS ai_hospital_notes (
                 note_id SERIAL PRIMARY KEY, document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
-                note_text TEXT, ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"""))
+                note_text TEXT, ai_keywords TEXT, university TEXT, project TEXT,
+                created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())"""))
             session.execute(sa_text("""CREATE TABLE IF NOT EXISTS ai_hospital_links (
                 link_id SERIAL PRIMARY KEY, url TEXT NOT NULL, title TEXT, description TEXT,
                 link_category VARCHAR(50), ai_keywords TEXT, created_at TIMESTAMP DEFAULT NOW())"""))
@@ -3758,59 +3759,90 @@ elif page == "🤖 AI Agent Hospital":
             df_ai["Full_Text"] = (df_ai["Title"] + " " + df_ai["Summary"]).str.lower()
 
             import re as re_ai
+            import math
             from collections import Counter
+            import plotly.graph_objects as go
 
             AI_TOPICS = {
-                "AI Agents & LLM": ["agent", "llm", "large language model", "chatgpt", "gpt-4", "gpt-3", "autonomous"],
-                "Self-Evolution": ["self-evolv", "medagent-zero", "evolution", "self-improv", "learning from cases"],
-                "Clinical Diagnostics": ["diagnos", "diagnostic", "accuracy", "medqa", "clinical decision"],
+                "AI Agents & LLM": ["agent", "llm", "large language model", "chatgpt", "gpt-4", "autonomous"],
+                "Self-Evolution": ["self-evolv", "medagent-zero", "evolution", "self-improv"],
+                "Clinical Diagnostics": ["diagnos", "accuracy", "medqa", "clinical decision"],
                 "Virtual Hospital": ["virtual hospital", "simulacrum", "simulation", "virtual patient", "digital twin"],
-                "Telemedicine": ["telemedicine", "telehealth", "remote", "rural", "smartphone", "5g"],
-                "Medical Education": ["medical education", "training", "medical student", "teaching", "curriculum"],
-                "DeepSeek Integration": ["deepseek", "open-source", "local deployment", "intranet"],
-                "Data Privacy": ["data privacy", "data sovereign", "anonymiz", "cybersecurity", "pipl", "compliance"],
-                "International Collaboration": ["international", "middle east", "southeast asia", "global", "cooperation"],
-                "Hospital Infrastructure": ["chang gung", "hospital expansion", "beds", "outpatient", "infrastructure"],
-                "Drug Discovery": ["drug", "drugclip", "pharmaceutical", "virtual screening", "alphafold"],
-                "Tairex & Startups": ["tairex", "zijing", "startup", "spinoff", "spin-off", "pilot"],
+                "Telemedicine": ["telemedicine", "telehealth", "remote", "rural", "smartphone"],
+                "Medical Education": ["medical education", "training", "medical student", "teaching"],
+                "DeepSeek Integration": ["deepseek", "open-source", "local deployment"],
+                "Data Privacy": ["data privacy", "data sovereign", "anonymiz", "cybersecurity", "pipl"],
+                "Drug Discovery": ["drug", "drugclip", "pharmaceutical", "virtual screening"],
+                "Neurodegenerative AI": ["alzheimer", "parkinson", "dementia", "neurodegen", "brain", "cognitive"],
+                "Mental Health AI": ["mental health", "psychiatric", "depression", "anxiety", "psycholog"],
+                "Medical Imaging": ["imaging", "pathology", "radiology", "mri", "ct scan", "computer vision"],
+                "Startups & Pilots": ["tairex", "zijing", "startup", "spinoff", "pilot", "commerc"],
+            }
+
+            UNIVERSITIES = {
+                "Tsinghua University": ["tsinghua", "air ", "institute for ai industry"],
+                "Peking University": ["peking university", "pku", "peking union"],
+                "Fudan University": ["fudan"],
+                "Shanghai Jiao Tong University": ["jiao tong", "sjtu"],
+                "Zhejiang University": ["zhejiang university"],
+                "USTC Hefei": ["ustc", "university of science and technology of china"],
+                "Tongji University": ["tongji"],
+                "West China / Sichuan University": ["west china", "sichuan university"],
+                "Sun Yat-sen University": ["sun yat-sen", "zhongshan university"],
+                "Harbin Institute of Technology": ["harbin institute", "hit "],
+                "Nanjing University": ["nanjing university"],
+                "Wuhan University": ["wuhan university"],
+                "Huazhong UST": ["huazhong", "hust"],
+            }
+
+            UNI_COORDS = {
+                "Tsinghua University": (39.99, 116.32), "Peking University": (39.99, 116.30),
+                "Fudan University": (31.30, 121.50), "Shanghai Jiao Tong University": (31.03, 121.43),
+                "Zhejiang University": (30.26, 120.12), "USTC Hefei": (31.84, 117.26),
+                "Tongji University": (31.28, 121.50), "West China / Sichuan University": (30.63, 104.09),
+                "Sun Yat-sen University": (23.09, 113.29), "Harbin Institute of Technology": (45.75, 126.68),
+                "Nanjing University": (32.06, 118.78), "Wuhan University": (30.54, 114.36),
+                "Huazhong UST": (30.51, 114.42),
             }
 
             ENTITIES = {
-                "Tsinghua AIR": ["tsinghua", "air ", "institute for ai"],
                 "Prof. Liu Yang": ["liu yang", "yang liu"],
                 "MedAgent-Zero": ["medagent", "med-agent"],
                 "Tairex": ["tairex"],
-                "Zijing Zhikang": ["zijing", "zhikang", "zijing ai"],
+                "Zijing Zhikang": ["zijing", "zhikang"],
                 "DeepSeek": ["deepseek"],
                 "Chang Gung Hospital": ["chang gung"],
-                "Ruijin Hospital": ["ruijin"],
-                "Tongji University": ["tongji"],
+                "MedGo (Tongji)": ["medgo"],
             }
 
             def extract_ai_topics(text):
                 return [t for t, kws in AI_TOPICS.items() if any(kw in text for kw in kws)] or ["General"]
-
+            def extract_universities(text):
+                return [u for u, kws in UNIVERSITIES.items() if any(kw in text for kw in kws)]
             def extract_entities(text):
                 return [e for e, kws in ENTITIES.items() if any(kw in text for kw in kws)]
 
             df_ai["Topics"] = df_ai["Full_Text"].apply(extract_ai_topics)
             df_ai["PrimaryTopic"] = df_ai["Topics"].apply(lambda x: x[0])
+            df_ai["Universities"] = df_ai["Full_Text"].apply(extract_universities)
             df_ai["Entities"] = df_ai["Full_Text"].apply(extract_entities)
 
             all_topics = [t for ts in df_ai["Topics"] for t in ts]
+            all_unis = [u for us in df_ai["Universities"] for u in us]
             all_entities = [e for es in df_ai["Entities"] for e in es]
 
             palette = ["#7B2D8E", "#0D7C66", "#E85D04", "#1E3A5F", "#C73E1D", "#D4A017",
                         "#2E86AB", "#A23B72", "#F18F01", "#44AF69", "#00B4D8", "#226F54"]
 
-            stop_w = {"the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","it","this","that","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","not","no","its","as","if","than","so","up","out","about","into","over","after","under","between","through","during","before","more","most","other","some","also","all","each","both","few","many","much","any","which","what","who","when","where","why","their","them","they","he","she","we","you","his","her","our","your","s","new","one","two","us","my","me","these","those","china","chinese","has","been","can","may","its","such","only","said","according","first","using","based","used"}
+            stop_w = {"the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","it","this","that","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","not","no","its","as","if","than","so","up","out","about","into","over","after","under","between","through","during","before","more","most","other","some","also","all","each","both","few","many","much","any","which","what","who","when","where","why","their","them","they","he","she","we","you","his","her","our","your","s","new","one","two","us","my","me","these","those","china","chinese","has","been","can","may","its","such","only","said","according","first","using","based","used","including","university"}
 
-            tab_dash, tab_arch, tab_notes, tab_links = st.tabs(["📊 Dashboard", "🏗️ Architecture & Research", "📝 Notes", "🔗 Links & Papers"])
+            tab_dash, tab_unis, tab_arch, tab_notes, tab_links = st.tabs([
+                "📊 Dashboard", "🎓 Universities & Projects", "🏗️ Architecture", "📝 Notes", "🔗 Links & Papers"])
 
             # ═══════════ TAB 1: DASHBOARD ═══════════
             with tab_dash:
                 section_header("🔍 Filters")
-                fc1, fc2, fc3 = st.columns([2, 2, 2])
+                fc1, fc2, fc3 = st.columns([2,2,2])
                 with fc1: sel_tp = st.multiselect("📌 Topic", sorted(set(all_topics)), default=[], key="aih_tp")
                 with fc2:
                     vd = df_ai["Date"].dropna()
@@ -3823,16 +3855,14 @@ elif page == "🤖 AI Agent Hospital":
                 if kw.strip(): filtered = filtered[filtered["Full_Text"].str.contains(kw.strip().lower(), na=False)]
 
                 f_topics = [t for ts in filtered["Topics"] for t in ts]
-                f_entities = [e for es in filtered["Entities"] for e in es]
+                f_unis = [u for us in filtered["Universities"] for u in us]
                 st.caption(f"**{len(filtered)}** articles"); st.markdown("---")
 
                 k1,k2,k3,k4 = st.columns(4)
                 with k1: kpi_card("Articles", str(len(filtered)))
                 with k2: kpi_card("Topics", str(len(set(f_topics))))
-                with k3: kpi_card("Entities", str(len(set(f_entities))))
-                with k4:
-                    this_m = len(filtered[filtered["Date"]>=pd.Timestamp.now()-pd.Timedelta(days=30)])
-                    kpi_card("This Month", str(this_m))
+                with k3: kpi_card("Universities", str(len(set(f_unis))))
+                with k4: kpi_card("This Month", str(len(filtered[filtered["Date"]>=pd.Timestamp.now()-pd.Timedelta(days=30)])))
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -3849,13 +3879,61 @@ elif page == "🤖 AI Agent Hospital":
                         fig.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
                         st.plotly_chart(fig, use_container_width=True)
                 with cs:
-                    st.markdown("##### ☀️ Entity × Topic")
-                    sr = [{"Entity": e, "Topic": t} for _, row in filtered.iterrows() for e in (row["Entities"] or ["Unknown"]) for t in row["Topics"]]
+                    st.markdown("##### ☀️ University × Topic")
+                    sr = [{"University": u, "Topic": t} for _, row in filtered.iterrows() for u in (row["Universities"] or ["Unknown"]) for t in row["Topics"]]
                     if sr:
-                        sa = pd.DataFrame(sr).groupby(["Entity","Topic"]).size().reset_index(name="Count")
-                        fs = px.sunburst(sa, path=["Entity","Topic"], values="Count", color="Count", color_continuous_scale=["#2E86AB","#7B2D8E","#E85D04"])
+                        sa = pd.DataFrame(sr).groupby(["University","Topic"]).size().reset_index(name="Count")
+                        fs = px.sunburst(sa, path=["University","Topic"], values="Count", color="Count", color_continuous_scale=["#2E86AB","#7B2D8E","#E85D04"])
                         style_plotly(fs, height=400); fs.update_layout(margin=dict(t=10,l=10,r=10,b=10), coloraxis_showscale=False)
                         st.plotly_chart(fs, use_container_width=True)
+
+                st.markdown("---")
+
+                # NETWORK: University × Topic
+                section_header("🕸️ Network: Universities × Research Areas")
+                edges = Counter()
+                for _, row in filtered.iterrows():
+                    for u in row["Universities"]:
+                        for t in row["Topics"]:
+                            edges[(u, t)] += 1
+                top_edges = edges.most_common(50)
+                if top_edges:
+                    ns = set()
+                    for (u, t), _ in top_edges: ns.add(("uni", u)); ns.add(("topic", t))
+                    nl = list(ns); unis_n = [n for n in nl if n[0]=="uni"]; tps_n = [n for n in nl if n[0]=="topic"]
+                    pos = {}
+                    for i, n in enumerate(unis_n): a = 2*math.pi*i/max(len(unis_n),1); pos[n] = (math.cos(a)*2.5, math.sin(a)*2.5)
+                    for i, n in enumerate(tps_n): a = 2*math.pi*i/max(len(tps_n),1); pos[n] = (math.cos(a)*1, math.sin(a)*1)
+                    ex, ey = [], []
+                    for (u, t), _ in top_edges:
+                        x0,y0 = pos[("uni",u)]; x1,y1 = pos[("topic",t)]; ex += [x0,x1,None]; ey += [y0,y1,None]
+                    uc = Counter(f_unis)
+                    fig_n = go.Figure()
+                    fig_n.add_trace(go.Scatter(x=ex, y=ey, mode="lines", line=dict(width=0.7, color="rgba(150,150,150,0.4)"), hoverinfo="none"))
+                    fig_n.add_trace(go.Scatter(x=[pos[n][0] for n in unis_n], y=[pos[n][1] for n in unis_n], mode="markers+text",
+                        marker=dict(size=[max(10, uc.get(n[1],1)*3) for n in unis_n], color="#7B2D8E", line=dict(width=1, color="white")),
+                        text=[n[1].replace(" University","").replace(" of Technology","") for n in unis_n], textposition="top center", textfont=dict(size=8), name="Universities"))
+                    ttc = Counter(f_topics)
+                    fig_n.add_trace(go.Scatter(x=[pos[n][0] for n in tps_n], y=[pos[n][1] for n in tps_n], mode="markers+text",
+                        marker=dict(size=[max(8, ttc.get(n[1],1)*2) for n in tps_n], color="#0D7C66", symbol="diamond"),
+                        text=[n[1] for n in tps_n], textposition="bottom center", textfont=dict(size=7, color="#0D7C66"), name="Topics"))
+                    style_plotly(fig_n, height=500)
+                    fig_n.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                    st.plotly_chart(fig_n, use_container_width=True)
+
+                st.markdown("---")
+
+                # HEATMAP: University × Topic
+                section_header("🔥 Heatmap: University × Research Area")
+                heat_rows = [{"University": u, "Topic": t} for _, row in filtered.iterrows() for u in row["Universities"] for t in row["Topics"]]
+                if heat_rows:
+                    hdf = pd.DataFrame(heat_rows)
+                    hp = hdf.pivot_table(index="University", columns="Topic", aggfunc="size", fill_value=0)
+                    if not hp.empty:
+                        fig_hm = px.imshow(hp.values, x=hp.columns.tolist(), y=hp.index.tolist(), color_continuous_scale=["#F5F0FF","#7B2D8E","#E85D04"], aspect="auto", text_auto=True)
+                        style_plotly(fig_hm, height=max(280, len(hp)*40+80)); fig_hm.update_layout(coloraxis_showscale=False, xaxis_title="", yaxis_title="")
+                        st.plotly_chart(fig_hm, use_container_width=True)
 
                 st.markdown("---")
 
@@ -3871,7 +3949,7 @@ elif page == "🤖 AI Agent Hospital":
                 st.markdown("---")
 
                 # WORD CLOUD + FREQ
-                section_header("💬 Text Analysis")
+                section_header("💬 Semantic Analysis")
                 corpus = " ".join(filtered["Title"].dropna().tolist()+filtered["Summary"].dropna().tolist()).lower()
                 words = [w for w in re_ai.findall(r"[a-z]{3,}", corpus) if w not in stop_w]
                 wf = Counter(words); tw = wf.most_common(25)
@@ -3889,7 +3967,7 @@ elif page == "🤖 AI Agent Hospital":
                             fig_fb = px.bar(tw_df, x="Count", y="Word", orientation="h", color="Count", color_continuous_scale=["#7B2D8E","#E85D04"])
                             style_plotly(fig_fb, height=350); st.plotly_chart(fig_fb, use_container_width=True)
                 with wc2:
-                    st.markdown("##### 📊 Top Words")
+                    st.markdown("##### 📊 Top Keywords")
                     if tw:
                         tw_df = pd.DataFrame(tw[:20], columns=["Word","Freq"])
                         ff = px.bar(tw_df, x="Freq", y="Word", orientation="h", color="Freq", text="Freq", color_continuous_scale=["#2E86AB","#7B2D8E"])
@@ -3899,7 +3977,7 @@ elif page == "🤖 AI Agent Hospital":
 
                 st.markdown("---")
 
-                # KEYWORD TREND
+                # KEYWORD TREND + AI INSIGHT
                 section_header("📈 Keyword Trends")
                 top_kw = [w for w, _ in tw[:8]]
                 tl_kw = filtered.dropna(subset=["Date"]).copy()
@@ -3911,6 +3989,32 @@ elif page == "🤖 AI Agent Hospital":
                     kr = [{"Month":row["YM"],"Keyword":k} for _,row in tl_r.iterrows() for k in top_kw if k in row["Full_Text"]]
                     if kr:
                         ka = pd.DataFrame(kr).groupby(["Month","Keyword"]).size().reset_index(name="Mentions")
+
+                        # AI Insight box
+                        top_kw_name = ka.groupby("Keyword")["Mentions"].sum().idxmax()
+                        top_kw_val = int(ka.groupby("Keyword")["Mentions"].sum().max())
+                        n_months = ka["Month"].nunique()
+                        avg_pm = round(ka.groupby("Month")["Mentions"].sum().mean(), 1)
+                        months_sorted = sorted(ka["Month"].unique())
+                        rising = []
+                        if len(months_sorted) >= 2:
+                            last2 = months_sorted[-2:]
+                            for k in top_kw:
+                                rec = ka[(ka["Keyword"]==k)&(ka["Month"].isin(last2))]["Mentions"].sum()
+                                tot = ka[ka["Keyword"]==k]["Mentions"].sum()
+                                if tot > 0 and rec/tot > 0.5: rising.append(k)
+                        rising_t = f"<b>Rising:</b> {', '.join(rising[:4])}" if rising else "<b>No clear rising trend</b>"
+
+                        st.markdown(f"""
+                        <div style="background:linear-gradient(135deg, #F5F0FF 0%, #F0F8FF 100%);border:1px solid #D6CCE6;border-left:4px solid #7B2D8E;
+                                    padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:16px;">
+                            <div style="font-size:0.8rem;font-weight:700;color:#3C3489;margin-bottom:6px;">🤖 Trend Intelligence</div>
+                            <div style="font-size:0.82rem;color:#444;line-height:1.6;">
+                                Analyzed <b>{n_months} months</b> with avg <b>{avg_pm} mentions/month</b>.
+                                Dominant keyword: <b>"{top_kw_name}"</b> ({top_kw_val} mentions). {rising_t}
+                            </div>
+                        </div>""", unsafe_allow_html=True)
+
                         fkt = px.area(ka, x="Month", y="Mentions", color="Keyword", color_discrete_sequence=palette, line_shape="spline")
                         fkt.update_traces(line=dict(width=2), opacity=0.7); style_plotly(fkt, height=350)
                         fkt.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)))
@@ -3925,105 +4029,98 @@ elif page == "🤖 AI Agent Hospital":
                 PS=12; tp=max(1,-(-len(disp)//PS)); pn=st.number_input("Page",1,tp,1,key="aih_page")
                 for _, row in disp.iloc[(pn-1)*PS:pn*PS].iterrows():
                     t_html = " ".join(f'<span style="background:#F3E5F5;color:#7B2D8E;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{t}</span>' for t in row["Topics"][:4])
-                    e_html = " ".join(f'<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">{e}</span>' for e in row["Entities"][:3])
+                    u_html = " ".join(f'<span style="background:#E3F2FD;color:#1565C0;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-right:3px;">🎓 {u}</span>' for u in row["Universities"][:2])
                     ds = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else ""
                     st.markdown(f"""<div style="background:#FFF;border-left:4px solid #7B2D8E;padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                            <a href="{row['URL']}" target="_blank" style="color:#0D2B45;font-weight:600;font-size:0.95rem;text-decoration:none;">{row['Title'][:120]}</a>
-                            <span style="color:#95A5A6;font-size:0.75rem;white-space:nowrap;margin-left:1rem;">{ds}</span></div>
-                        <div style="margin:0.3rem 0;">{t_html} {e_html}</div>
+                        <div style="display:flex;justify-content:space-between;"><a href="{row['URL']}" target="_blank" style="color:#0D2B45;font-weight:600;font-size:0.95rem;text-decoration:none;">{row['Title'][:120]}</a>
+                        <span style="color:#95A5A6;font-size:0.75rem;white-space:nowrap;margin-left:1rem;">{ds}</span></div>
+                        <div style="margin:0.3rem 0;">{t_html} {u_html}</div>
                         <div style="color:#7F8C8D;font-size:0.85rem;line-height:1.5;margin-top:0.3rem;">{row['Summary'][:200]}{'...' if len(row['Summary'])>200 else ''}</div></div>""", unsafe_allow_html=True)
                 st.caption(f"Page {pn} of {tp} — {len(disp)} articles")
 
-            # ═══════════ TAB 2: ARCHITECTURE ═══════════
+            # ═══════════ TAB 2: UNIVERSITIES ═══════════
+            with tab_unis:
+                section_header("🎓 Chinese Universities in AI Healthcare")
+
+                uc = Counter(all_unis)
+                if uc:
+                    st.markdown("##### 📊 Most Active Universities")
+                    uc_df = pd.DataFrame(uc.most_common(15), columns=["University","Mentions"])
+                    fig_u = px.bar(uc_df, x="Mentions", y="University", orientation="h", color="Mentions", text="Mentions", color_continuous_scale=["#7B2D8E","#0D7C66"])
+                    fig_u.update_traces(textposition="outside"); style_plotly(fig_u, height=400)
+                    fig_u.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
+                    st.plotly_chart(fig_u, use_container_width=True)
+
+                st.markdown("---")
+
+                # CHINA MAP
+                section_header("🗺️ University AI Healthcare Hubs")
+                if uc:
+                    mr = [{"University": u, "Articles": c, "lat": UNI_COORDS[u][0], "lon": UNI_COORDS[u][1]} for u, c in uc.items() if u in UNI_COORDS]
+                    if mr:
+                        mdf = pd.DataFrame(mr)
+                        fig_m = px.scatter_geo(mdf, lat="lat", lon="lon", size="Articles", hover_name="University", color="Articles",
+                                               color_continuous_scale=["#D4A017","#7B2D8E"], size_max=35, scope="asia")
+                        fig_m.update_geos(center=dict(lat=33, lon=108), projection_scale=3, showland=True, landcolor="#F5F0E8",
+                                           showocean=True, oceancolor="#EBF5FB", showcountries=True, countrycolor="#ccc")
+                        style_plotly(fig_m, height=450); fig_m.update_layout(margin=dict(t=10,l=0,r=0,b=10), coloraxis_showscale=False)
+                        st.plotly_chart(fig_m, use_container_width=True)
+
+                st.markdown("---")
+
+                # KEY PROJECTS
+                section_header("🔬 Key Projects")
+                projects = [
+                    ("🤖 Agent Hospital", "Tsinghua AIR", "World's first AI virtual hospital. 42 AI doctors, 21 specialties, 300+ diseases. MedAgent-Zero self-evolution framework. 93.06% accuracy on MedQA.", "https://arxiv.org/abs/2405.02957"),
+                    ("💊 MedGo", "Tongji University", "Medical LLM trained on 6,000 textbooks. Integrated at Shanghai East Hospital for clinical decision support.", ""),
+                    ("🧬 CANDI Cohort", "USTC Hefei", "China Aging and Neurodegenerative Initiative. 500+ participants, ATN biomarker framework for Alzheimer's screening.", ""),
+                    ("🔬 DeepSeek Medical", "DeepSeek AI", "Open-source LLM deployed in 260+ hospitals across 93.5% of provinces. Local deployment on hospital intranets.", ""),
+                    ("🏥 Zijing AI Doctor", "Tsinghua spin-off", "42 AI doctors across 21 specialties. Commercial deployment via Zijing Zhikang startup.", ""),
+                ]
+                for icon_name, uni, desc, link in projects:
+                    link_html = f' <a href="{link}" target="_blank" style="color:#7B2D8E;font-size:0.8rem;">[Paper]</a>' if link else ""
+                    st.markdown(f"""<div style="background:#FFF;border-left:4px solid #7B2D8E;padding:1rem 1.2rem;margin:0.5rem 0;border-radius:0 6px 6px 0;">
+                        <div style="font-weight:600;color:#0D2B45;font-size:0.95rem;">{icon_name}{link_html}</div>
+                        <div style="font-size:0.8rem;color:#7B2D8E;margin:2px 0;">🎓 {uni}</div>
+                        <div style="color:#666;font-size:0.85rem;margin-top:4px;">{desc}</div></div>""", unsafe_allow_html=True)
+
+            # ═══════════ TAB 3: ARCHITECTURE ═══════════
             with tab_arch:
                 section_header("🏗️ AI Agent Hospital Architecture")
-
                 st.markdown("""
                 <div style="background:linear-gradient(135deg, #F5F0FF 0%, #F0F8FF 100%);border:1px solid #D6CCE6;border-left:4px solid #7B2D8E;padding:16px 20px;border-radius:0 10px 10px 0;margin-bottom:20px;">
-                    <div style="font-size:1rem;font-weight:700;color:#3C3489;margin-bottom:8px;">🤖 Agent Hospital — World's First AI-Powered Virtual Hospital</div>
+                    <div style="font-size:1rem;font-weight:700;color:#3C3489;margin-bottom:8px;">🤖 Agent Hospital — World's First AI Virtual Hospital</div>
                     <div style="font-size:0.88rem;color:#444;line-height:1.7;">
-                        Developed by <strong>Tsinghua University AIR</strong> (Institute for AI Industry Research), led by <strong>Prof. Liu Yang</strong>.<br>
-                        Paper: <a href="https://arxiv.org/abs/2405.02957" target="_blank" style="color:#7B2D8E;">arXiv:2405.02957</a> — "Agent Hospital: A Simulacrum of Hospital with Evolvable Medical Agents"
+                        Developed by <strong>Tsinghua University AIR</strong>, led by <strong>Prof. Liu Yang</strong>.<br>
+                        Paper: <a href="https://arxiv.org/abs/2405.02957" target="_blank" style="color:#7B2D8E;">arXiv:2405.02957</a>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.markdown("##### Core Framework: MedAgent-Zero")
-                    st.markdown("""
-                    - **Self-evolving** AI doctors that learn from simulated cases
-                    - No manual data labeling needed
-                    - LLM-powered agents (GPT-3.5/4, upgrading to latest)
-                    - After 10,000 virtual patients: **93.06% accuracy** on MedQA
-                    - Time-compression engine simulates full patient journey
-                    """)
-
+                    st.markdown("##### MedAgent-Zero Framework")
+                    st.markdown("- **Self-evolving** AI doctors learning from cases\n- No manual labeling needed\n- 10,000 virtual patients → **93.06% accuracy**\n- Time-compression engine for full patient journey")
                 with c2:
                     st.markdown("##### Scale & Deployment")
-                    st.markdown("""
-                    - **42 AI doctors** across **21 clinical specialties**
-                    - **300+ diseases** covered
-                    - 14 doctor agents + 4 nurse agents (original design)
-                    - Beijing Tsinghua Chang Gung Hospital: **1,500 beds**
-                    - Up to **10,000 outpatients/day**
-                    """)
+                    st.markdown("- **42 AI doctors**, **21 specialties**, **300+ diseases**\n- Chang Gung Hospital: **1,500 beds**, 10k outpatients/day\n- International: Middle East, SE Asia, Western countries\n- DeepSeek: **260+ hospitals**, 93.5% provinces")
 
                 st.markdown("---")
-
                 st.markdown("##### Key Milestones")
-                milestones = [
-                    ("May 2024", "Paper published on arXiv — first AI hospital concept"),
-                    ("Nov 2024", "Zijing AI Doctor launched (42 doctors, 21 specialties)"),
-                    ("Q1 2025", "Tairex public pilot begins"),
-                    ("Apr 2025", "Official inauguration by Tsinghua President Li Luming"),
-                    ("May 2025", "Chang Gung Hospital Phase II opens (+500 beds)"),
-                    ("2025+", "International collaborations: Middle East, SE Asia, Western countries"),
-                ]
-                for date, event in milestones:
-                    st.markdown(f"""
-                    <div style="display:flex;gap:12px;margin:6px 0;align-items:flex-start;">
-                        <span style="background:#7B2D8E;color:#fff;padding:2px 10px;border-radius:12px;font-size:0.72rem;font-weight:600;white-space:nowrap;">{date}</span>
-                        <span style="font-size:0.88rem;color:#444;">{event}</span>
-                    </div>""", unsafe_allow_html=True)
+                for date, event in [("May 2024","Paper on arXiv"),("Nov 2024","Zijing AI Doctor launched"),("Q1 2025","Tairex pilot"),("Apr 2025","Official inauguration"),("May 2025","Chang Gung Phase II (+500 beds)")]:
+                    st.markdown(f'<div style="display:flex;gap:12px;margin:6px 0;"><span style="background:#7B2D8E;color:#fff;padding:2px 10px;border-radius:12px;font-size:0.72rem;font-weight:600;white-space:nowrap;">{date}</span><span style="font-size:0.88rem;color:#444;">{event}</span></div>', unsafe_allow_html=True)
 
-                st.markdown("---")
-
-                st.markdown("##### DeepSeek AI Integration")
-                st.markdown("""
-                <div style="background:#F0F8FF;border:1px solid #B8D4E3;padding:14px 18px;border-radius:8px;">
-                    <div style="font-size:0.88rem;color:#444;line-height:1.7;">
-                        <strong>260+ hospitals</strong> across <strong>93.5% of China's provinces</strong> have deployed DeepSeek locally.<br>
-                        Key deployments: Ruijin Hospital (3,000 pathology slides/day), Chengdu First People's Hospital (telemedicine),
-                        Shanghai Sixth Hospital Jinshan Branch (real-time AI workstations).<br>
-                        All data stays within hospital firewalls — full compliance with China's PIPL data sovereignty laws.
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("---")
-
-                # Entity mentions chart
-                section_header("🏢 Key Players")
-                ec = Counter(all_entities)
-                if ec:
-                    ec_df = pd.DataFrame(ec.most_common(10), columns=["Entity","Mentions"])
-                    fig_e = px.bar(ec_df, x="Mentions", y="Entity", orientation="h", color="Mentions", text="Mentions", color_continuous_scale=["#7B2D8E","#0D7C66"])
-                    fig_e.update_traces(textposition="outside"); style_plotly(fig_e, height=350)
-                    fig_e.update_layout(yaxis=dict(autorange="reversed"), showlegend=False, coloraxis_showscale=False)
-                    st.plotly_chart(fig_e, use_container_width=True)
-
-            # ═══════════ TAB 3: NOTES ═══════════
+            # ═══════════ TAB 4: NOTES ═══════════
             with tab_notes:
                 section_header("📝 Notes & Research")
                 titles = df_ai["Title"].tolist()
-                sel = st.selectbox("📄 Select article", titles, index=0, key="aih_sel")
+                sel = st.selectbox("📄 Article", titles, index=0, key="aih_sel")
                 sr = df_ai[df_ai["Title"]==sel].iloc[0]; did = int(sr["DocID"])
-                ex = session.execute(sa_text("SELECT note_text,ai_keywords FROM ai_hospital_notes WHERE document_id=:d ORDER BY updated_at DESC LIMIT 1"), {"d":did}).fetchone()
+                ex = session.execute(sa_text("SELECT note_text,ai_keywords,university,project FROM ai_hospital_notes WHERE document_id=:d ORDER BY updated_at DESC LIMIT 1"), {"d":did}).fetchone()
                 nc1,nc2 = st.columns([3,1])
                 with nc1:
-                    nt = st.text_area("✏️ Notes", value=ex[0] if ex else "", height=180, key="aih_note")
+                    nt = st.text_area("✏️ Notes", value=ex[0] if ex else "", height=160, key="aih_note")
+                    n_uni = st.text_input("🎓 University/Institution", value=ex[2] if ex and ex[2] else "", key="aih_uni")
+                    n_proj = st.text_input("🔬 Project name", value=ex[3] if ex and ex[3] else "", key="aih_proj")
                 with nc2:
                     st.markdown("##### 🤖 AI Keywords")
                     if ex and ex[1]:
@@ -4032,20 +4129,24 @@ elif page == "🤖 AI Agent Hospital":
                     combined = (nt+" "+sr["Title"]+" "+sr["Summary"]).lower()
                     nw = [w for w in re_ai.findall(r"[a-z]{4,}", combined) if w not in stop_w]
                     ak = ", ".join([w for w,_ in Counter(nw).most_common(10)])
-                    if ex: session.execute(sa_text("UPDATE ai_hospital_notes SET note_text=:n,ai_keywords=:k,updated_at=NOW() WHERE document_id=:d"), {"n":nt,"k":ak,"d":did})
-                    else: session.execute(sa_text("INSERT INTO ai_hospital_notes (document_id,note_text,ai_keywords) VALUES (:d,:n,:k)"), {"d":did,"n":nt,"k":ak})
+                    if ex: session.execute(sa_text("UPDATE ai_hospital_notes SET note_text=:n,ai_keywords=:k,university=:u,project=:p,updated_at=NOW() WHERE document_id=:d"), {"n":nt,"k":ak,"u":n_uni,"p":n_proj,"d":did})
+                    else: session.execute(sa_text("INSERT INTO ai_hospital_notes (document_id,note_text,ai_keywords,university,project) VALUES (:d,:n,:k,:u,:p)"), {"d":did,"n":nt,"k":ak,"u":n_uni,"p":n_proj})
                     session.commit(); st.success("✅ Saved!"); st.rerun()
 
                 st.markdown("---")
-                an = session.execute(sa_text("SELECT n.note_text,n.ai_keywords,n.updated_at,d.title FROM ai_hospital_notes n JOIN documents d ON n.document_id=d.document_id ORDER BY n.updated_at DESC")).fetchall()
+                an = session.execute(sa_text("SELECT n.note_text,n.ai_keywords,n.university,n.project,n.updated_at,d.title FROM ai_hospital_notes n JOIN documents d ON n.document_id=d.document_id ORDER BY n.updated_at DESC")).fetchall()
                 if an:
                     for n in an:
-                        with st.expander(f"📄 {n[3][:70]}"): st.markdown(n[0]); st.markdown(f"**Keywords:** {n[1]}" if n[1] else "")
+                        with st.expander(f"📄 {n[5][:70]}"):
+                            st.markdown(n[0])
+                            if n[2]: st.markdown(f"**University:** 🎓 {n[2]}")
+                            if n[3]: st.markdown(f"**Project:** 🔬 {n[3]}")
+                            if n[1]: st.markdown(f"**Keywords:** {n[1]}")
 
-            # ═══════════ TAB 4: LINKS ═══════════
+            # ═══════════ TAB 5: LINKS ═══════════
             with tab_links:
                 section_header("🔗 Links & Papers")
-                cats = ["arXiv Paper","Research Article","News","Hospital Website","Startup","GitHub Repo","Video/Presentation","Other"]
+                cats = ["arXiv Paper","Research Article","University Website","News","Clinical Trial","GitHub Repo","Video/Presentation","Other"]
                 with st.form("aih_add", clear_on_submit=True):
                     lu = st.text_input("🔗 URL"); lt = st.text_input("📄 Title")
                     lc = st.selectbox("📁 Category", cats); ld = st.text_area("📝 Notes", height=80)
@@ -4058,13 +4159,13 @@ elif page == "🤖 AI Agent Hospital":
                 links = session.execute(sa_text("SELECT link_id,url,title,description,link_category,ai_keywords,created_at FROM ai_hospital_links ORDER BY created_at DESC")).fetchall()
                 if links:
                     for lk in links:
-                        cc = {"arXiv Paper":"#7B2D8E","Research Article":"#0D7C66","News":"#2E86AB","Hospital Website":"#C73E1D","Startup":"#E85D04","GitHub Repo":"#1E3A5F","Video/Presentation":"#D4A017"}.get(lk[4],"#95A5A6")
+                        cc = {"arXiv Paper":"#7B2D8E","Research Article":"#0D7C66","University Website":"#1E3A5F","News":"#2E86AB","Clinical Trial":"#C73E1D","GitHub Repo":"#444","Video/Presentation":"#D4A017"}.get(lk[4],"#95A5A6")
                         kp = " ".join(f'<span style="background:#F5F5F5;color:#444;padding:2px 6px;border-radius:10px;font-size:0.72rem;">{k.strip()}</span>' for k in (lk[5] or "").split(",")[:6] if k.strip())
                         st.markdown(f'<div style="background:#FFF;border-left:4px solid {cc};padding:1rem 1.2rem;margin:0.4rem 0;border-radius:0 6px 6px 0;"><div style="display:flex;justify-content:space-between;"><a href="{lk[1]}" target="_blank" style="color:#0D2B45;font-weight:600;text-decoration:none;">{lk[2] or lk[1][:80]}</a><span style="background:{cc};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.72rem;">{lk[4]}</span></div><div style="margin:0.3rem 0;">{kp}</div><div style="color:#7F8C8D;font-size:0.85rem;">{(lk[3] or "")[:200]}</div></div>', unsafe_allow_html=True)
                         if st.button("🗑️", key=f"aih_del_{lk[0]}"):
                             session.execute(sa_text("DELETE FROM ai_hospital_links WHERE link_id=:id"), {"id":lk[0]}); session.commit(); st.rerun()
                 else:
-                    st.info("No links yet. Add arXiv papers, news articles, and research resources!")
+                    st.info("No links yet. Add arXiv papers, university websites, and resources!")
 
         else:
             st.info("No AI Agent Hospital articles yet. Run the collector:")
