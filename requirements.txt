@@ -1,43 +1,43 @@
-# ============================
-# Geopolitical Health Intelligence Dashboard
-# requirements.txt
-# ============================
+# ══════════════════════════════════════════════════════════
+# BrAIn Democracy — Requirements (pinned versions)
+# Last updated: June 2026
+# ══════════════════════════════════════════════════════════
 
-# Database
-sqlalchemy>=2.0
-psycopg2-binary>=2.9
+# ── Core Database ──
+sqlalchemy==2.0.51
+psycopg2-binary==2.9.12
 
-# HTTP / Scraping
-requests>=2.31
-beautifulsoup4>=4.12
-feedparser>=6.0
-lxml>=5.0
+# ── Web & Scraping ──
+requests==2.33.1
+beautifulsoup4==4.14.3
+lxml==6.0.2
+feedparser==6.0.11
 
-# Data
-pandas>=2.1
-numpy>=1.26
+# ── Dashboard ──
+streamlit==1.45.1
+pandas==2.2.3
+plotly==6.1.2
+wordcloud==1.9.4
+matplotlib==3.10.3
 
-# NLP / Text Processing
-spacy>=3.7
-rapidfuzz>=3.5
+# ── Config ──
+python-dotenv==1.2.2
 
-# API Clients
-biopython>=1.83        # PubMed E-utilities
-pytrends>=4.9          # Google Trends (non-official)
+# ── Supabase ──
+supabase==2.15.1
 
-# Dashboard
-streamlit>=1.30
-plotly>=5.18
-pydeck>=0.8
-streamlit-autorefresh>=1.0.1
+# ── AI & LLM ──
+anthropic==0.55.0
 
-# Scheduling
-schedule>=1.2
+# ── Knowledge Graph ──
+neo4j==5.29.0
+pyvis==0.3.2
 
-# Utilities
-python-dotenv>=1.0
-pyyaml>=6.0
+# ── Future: Agent Simulation ──
+langchain==0.3.25
+langchain-community==0.3.24
+qdrant-client==1.14.2
 
-# Email alerts
-jinja2>=3.1
-supabase
+# ── Testing ──
+pytest==8.4.1
+pytest-cov==6.2.1
