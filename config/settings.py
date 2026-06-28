@@ -4,6 +4,7 @@ Carica variabili da .env e definisce costanti.
 """
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -12,11 +13,20 @@ ROOT_DIR = Path(__file__).parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
 
+# ── Verifica variabili critiche ───────────────────────────
+def _require_env(name: str) -> str:
+    """Restituisce la variabile d'ambiente o lancia errore chiaro."""
+    val = os.getenv(name)
+    if not val:
+        print(f"\n❌ ERRORE: Variabile d'ambiente '{name}' non impostata.")
+        print(f"   Copia .env.template in .env e compila i valori.")
+        print(f"   cp .env.template .env\n")
+        sys.exit(1)
+    return val
+
+
 # ── Database ──────────────────────────────────────────────
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/health_intel"
-)
+DATABASE_URL = _require_env("DATABASE_URL")
 
 # ── NCBI / PubMed ────────────────────────────────────────
 NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
@@ -27,10 +37,7 @@ NCBI_RATE_LIMIT = 10 if NCBI_API_KEY else 3  # req/sec
 BUNDESTAG_API_KEY = os.getenv("BUNDESTAG_API_KEY", "")
 
 # ── BfArM DiGA ────────────────────────────────────────────
-DIGA_FHIR_TOKEN = os.getenv(
-    "DIGA_FHIR_TOKEN",
-    "116b0a73-6e3b-4a88-9313-9947a4fed9ef"
-)
+DIGA_FHIR_TOKEN = os.getenv("DIGA_FHIR_TOKEN", "")
 DIGA_FHIR_BASE = "https://diga.bfarm.de/api/fhir/v2.0"
 
 # ── Email ─────────────────────────────────────────────────
