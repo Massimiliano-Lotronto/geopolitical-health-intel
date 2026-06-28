@@ -79,6 +79,12 @@ jobs:
         continue-on-error: true
         run: python -c "from collectors.chatham_collector import run; run()"
 
+      - name: Run Chatham House Library collector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
+        run: python -c "from collectors.chatham_library_collector import run; run()"
+
       - name: Run China Medical Tourism collector
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
