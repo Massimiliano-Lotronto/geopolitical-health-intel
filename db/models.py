@@ -212,6 +212,156 @@ class TrendsMetric(Base):
     )
 
 
+# ── ENTITIES ──────────────────────────────────────────────
+class Entity(Base):
+    """Entità estratte dai documenti: aziende, enti regolatori, tecnologie, persone."""
+    __tablename__ = "entities"
+
+    entity_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(300), nullable=False)
+    canonical_name = Column(String(300))  # nome normalizzato per dedup
+    entity_type = Column(String(50), nullable=False)  # company|regulator|technology|person|country|ngo|university|hospital
+    country = Column(String(100))
+    region = Column(String(100))
+    website = Column(Text)
+    description = Column(Text)
+    first_seen_date = Column(Date, default=date.today)
+    last_seen_date = Column(Date)
+    confidence = Column(Float, default=0.5)  # 0-1, quanto siamo sicuri dell'estrazione
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relazioni
+    mentions = relationship("EntityMention", back_populates="entity")
+    source_relations = relationship(
+        "EntityRelation",
+        back_populates="source_entity",
+        foreign_keys="EntityRelation.source_entity_id"
+    )
+    target_relations = relationship(
+        "EntityRelation",
+        back_populates="target_entity",
+        foreign_keys="EntityRelation.target_entity_id"
+    )
+
+    __table_args__ = (
+        Index("ix_entity_canonical", "canonical_name"),
+        Index("ix_entity_type", "entity_type"),
+        Index("ix_entity_country", "country"),
+        UniqueConstraint("canonical_name", "entity_type", name="uq_entity_canonical_type"),
+    )
+
+
+# ── ENTITY MENTIONS (collega entità a documenti) ──────────
+class EntityMention(Base):
+    """Ogni volta che un'entità appare in un documento."""
+    __tablename__ = "entity_mentions"
+
+    mention_id = Column(Integer, primary_key=True, autoincrement=True)
+    entity_id = Column(Integer, ForeignKey("entities.entity_id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.document_id"), nullable=False)
+    context_text = Column(Text)  # estratto del testo attorno alla menzione
+    mention_count = Column(Integer, default=1)  # quante volte appare nel documento
+    sentiment = Column(String(20), default="neutral")
+    role = Column(String(100))  # es. "approvatore", "investitore", "target"
+    extracted_at = Column(DateTime, default=datetime.utcnow)
+
+    entity = relationship("Entity", back_populates="mentions")
+    document = relationship("Document")
+
+    __table_args__ = (
+        Index("ix_mention_entity", "entity_id"),
+        Index("ix_mention_document", "document_id"),
+        UniqueConstraint("entity_id", "document_id", name="uq_entity_doc"),
+    )
+
+
+# ── ENTITY RELATIONS (grafo di relazioni) ─────────────────
+class EntityRelation(Base):
+    """Relazioni tra entità: partnership, investimenti, acquisizioni, etc."""
+    __tablename__ = "entity_relations"
+
+    relation_id = Column(Integer, primary_key=True, autoincrement=True)
+    source_entity_id = Column(Integer, ForeignKey("entities.entity_id"), nullable=False)
+    target_entity_id = Column(Integer, ForeignKey("entities.entity_id"), nullable=False)
+    relation_type = Column(String(50), nullable=False)  # partnership|investment|acquisition|approval|regulation|competitor|supplier|research
+    direction = Column(String(20), default="directed")  # directed|bidirectional
+    strength = Column(Float, default=0.5)  # 0-1, forza/frequenza della relazione
+    confidence = Column(Float, default=0.5)  # 0-1, certezza dell'estrazione
+    first_observed_date = Column(Date, default=date.today)
+    last_observed_date = Column(Date)
+    document_count = Column(Integer, default=1)  # in quanti documenti appare questa relazione
+    evidence_document_ids = Column(Text)  # JSON array di document_id
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    source_entity = relationship(
+        "Entity",
+        back_populates="source_relations",
+        foreign_keys=[source_entity_id]
+    )
+    target_entity = relationship(
+        "Entity",
+        back_populates="target_relations",
+        foreign_keys=[target_entity_id]
+    )
+
+    __table_args__ = (
+        Index("ix_relation_source", "source_entity_id"),
+        Index("ix_relation_target", "target_entity_id"),
+        Index("ix_relation_type", "relation_type"),
+        UniqueConstraint("source_entity_id", "target_entity_id", "relation_type", name="uq_entity_relation"),
+    )
+
+
+# ── TECHNOLOGY RADAR ──────────────────────────────────────
+class TechnologyRadar(Base):
+    """Tecnologie emergenti monitorate nel radar."""
+    __tablename__ = "technology_radar"
+
+    tech_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True)
+    category = Column(String(100))  # ai_diagnostics|telemedicine|wearables|genomics|digital_therapeutics
+    subcategory = Column(String(100))
+    trl_level = Column(Integer, default=1)  # 1-9 Technology Readiness Level
+    description = Column(Text)
+    dual_use_potential = Column(Boolean, default=False)
+    first_detected_date = Column(Date, default=date.today)
+    last_signal_date = Column(Date)
+    signal_count = Column(Integer, default=0)
+    momentum_score = Column(Float, default=0.0)  # 0-100, trend
+    hype_cycle_phase = Column(String(30))  # emerging|peak|trough|plateau|mature
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_tech_category", "category"),
+        Index("ix_tech_momentum", "momentum_score"),
+    )
+
+
+# ── TECHNOLOGY SIGNALS (collega tecnologie a documenti) ──
+class TechnologySignal(Base):
+    """Segnali di adozione/regolamentazione per ogni tecnologia."""
+    __tablename__ = "technology_signals"
+
+    tech_signal_id = Column(Integer, primary_key=True, autoincrement=True)
+    tech_id = Column(Integer, ForeignKey("technology_radar.tech_id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.document_id"), nullable=False)
+    signal_type = Column(String(50))  # regulatory|funding|partnership|approval|market_entry|research
+    country = Column(String(100))
+    impact_score = Column(Float, default=0.0)
+    notes = Column(Text)
+    extracted_at = Column(DateTime, default=datetime.utcnow)
+
+    technology = relationship("TechnologyRadar")
+    document = relationship("Document")
+
+    __table_args__ = (
+        Index("ix_techsignal_tech", "tech_id"),
+        Index("ix_techsignal_doc", "document_id"),
+        UniqueConstraint("tech_id", "document_id", "signal_type", name="uq_tech_signal"),
+    )
+    
 # ── ENGINE & SESSION FACTORY ─────────────────────────────
 def get_engine(database_url: str):
     """Crea engine SQLAlchemy."""
