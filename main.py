@@ -281,11 +281,21 @@ if __name__ == "__main__":
                         help="Salta l'invio degli alert email")
     parser.add_argument("--init-db", action="store_true",
                         help="Inizializza database e seed dati")
+    parser.add_argument("--run-agent", action="store_true",
+                        help="Esegui l'agente AI (HealthAnalystAgent) sui documenti recenti")
     args = parser.parse_args()
 
     if args.init_db:
         from db.init_db import main as init_main
         init_main()
+    elif args.run_agent:
+        from agents.analyst_agent import HealthAnalystAgent
+        engine = get_engine(DATABASE_URL)
+        session = get_session(engine)
+        try:
+            HealthAnalystAgent(session).generate_report()
+        finally:
+            session.close()
     else:
         run_pipeline(
             collectors_only=args.collectors_only,
